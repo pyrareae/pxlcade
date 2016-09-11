@@ -1,3 +1,4 @@
+local timer = require("timer")
 local games = {}
 -- games['pong'] = require("games.pong.main")
 -- games['pong'].cwd = 'games/pong/'
@@ -23,13 +24,13 @@ function GotoMenu() --return to main menu, call from subgames
     PXL.state="menu"
 end
 PXL.state = 'intro'
-PXL.timer = {--todo make this complecated
-    intro = 1
-}
 PXL.images = {}
+PXL.timers = {}
 
 function love.load()
+    --generat setup
     PXL.screen.canvas = love.graphics.newCanvas(PXL.screen.x,PXL.screen.y)
+    PXL.timers.intro = timer:new(1000)
     
     --include resources
     PXL.images.banner = love.graphics.newImage("images/banner.png")
@@ -66,11 +67,7 @@ function love.load()
 --     games[selected]:load()
 end
 function love.update(dt)
-    if PXL.state == 'intro' then
-        PXL.timer.intro = PXL.timer.intro - dt
-    end
-    if PXL.timer.intro and PXL.timer.intro < 0 then
-        PXL.timer.intro = nil
+    if PXL.timers.intro:once() then
         PXL.state = 'menu'
     end
     
@@ -84,8 +81,9 @@ function love.keypressed(key, screencode, isrepeat)
     if PXL.state == 'menu' then
         if key == "return" then
             PXL.state = 'game'
-            print(PXL.state)
             games:active():load()
+        elseif key == "right" then
+        elseif key == "left" then
         elseif key == 'q' then
             love.event.push('quit')
         end
