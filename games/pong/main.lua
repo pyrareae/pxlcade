@@ -1,4 +1,5 @@
 local M = {}
+M.name = "Pong"
 M.fx = {
     crt = true,
     trail = false,
@@ -26,23 +27,6 @@ M.ball = {
     yVel = 0,
     size = 3,
 }
-M.screen = {
-    x = 64,
-    y = 48,
-    scale= function(self)
-        local xs = love.graphics.getWidth()/self.x
-        local ys = love.graphics.getHeight()/self.y
-        return math.min(xs,ys)
-    end,
-    offset = function(self)
-        local off = (love.graphics.getWidth()-self.x*self:scale())/2
-        return off > 0 and off or 0
-    end
-}
-M.collborder = {
-    left =  M.player2.thickness + 4,
-    right = M.screen.x - M.player1.thickness - 3
-}
 M.colors = {
     white =  {255,255,255},
     gray =   {200,200,200},
@@ -50,7 +34,6 @@ M.colors = {
     violet = {150,150,255},
     pink =   {255,70,170}
 }
-M.canvas = love.graphics.newCanvas(M.screen.x,M.screen.y)
 M.difficulty = 2
 M.difficulties = {"easy", "normal", "hard"}
 M.multiplayer = false
@@ -83,6 +66,12 @@ function M:initgame() --init/reset game state
 end
 M.cwd = nil -- this should be set by main code
 function M:load()
+    --these two are here so that screen exists when run
+    M.collborder = {
+        left =  M.player2.thickness + 4,
+        right = M.screen.x - M.player1.thickness - 3
+    }
+--     M.canvas = M.PXL.screen.canvas --quick ref change xxx
     local cwd = self.cwd
     self.font = love.graphics.newFont(cwd.."AerxFont.ttf", 16)
     self.sounds = {
@@ -132,7 +121,8 @@ function M:update(dt)
     end
     --misc input
     if love.keyboard.isDown('q') then
-        love.event.push('quit')
+--         love.event.push('quit')
+        GotoMenu()
     end
     if love.keyboard.isDown('r') then
         self:initgame()
@@ -250,11 +240,12 @@ function M:update(dt)
 end
 
 function M:draw()
-    self.canvas:setFilter('nearest', 'nearest', 0)
-    love.graphics.setCanvas(self.canvas)
-    love.graphics.setDefaultFilter('nearest', 'nearest', 0)
-    love.graphics.clear()
-    love.graphics.setFont(self.font)
+--     self.PXL.screen.canvas:setFilter('nearest', 'nearest', 0)
+--     love.graphics.setCanvas(self.PXL.screen.canvas)
+--     love.graphics.setDefaultFilter('nearest', 'nearest', 0)
+--     love.graphics.clear()
+--     love.graphics.setFont(self.font)
+--     debug.debug()
     
     if not self.alive then
         love.graphics.setColor(self.colors.white)
@@ -308,26 +299,26 @@ function M:draw()
         love.graphics.rectangle('line', self.player2.x, self.player2.y, self.player2.thickness, self.player2.len)
     end
     
-    --noise effect
-    if self.fx.grain then
-        for y=0,self.screen.y do
-            for x=0,self.screen.x do
-                local color = math.random(0,255)
-                love.graphics.setColor(color,color,color,25)
-                love.graphics.rectangle('fill',x+self.screen:offset(),y,1,1)
-            end
-        end
-    end
-    love.graphics.setColor(255,255,255,255)
+--     --noise effect
+--     if self.fx.grain then
+--         for y=0,self.screen.y do
+--             for x=0,self.screen.x do
+--                 local color = math.random(0,255)
+--                 love.graphics.setColor(color,color,color,25)
+--                 love.graphics.rectangle('fill',x+self.screen:offset(),y,1,1)
+--             end
+--         end
+--     end
+--     love.graphics.setColor(255,255,255,255)
     
-    love.graphics.setCanvas()
---     love.graphics.setBlendMode("alpha", "premultiplied")
-    love.graphics.setColor(255,255,255,255)
-    love.graphics.draw(self.canvas, self.screen:offset(),0,0, self.screen:scale(), self.screen:scale())
-    if self.fx.crt then
-        love.graphics.setBlendMode("multiply")
-        love.graphics.draw(self.pixelimg,self.screen:offset(),0,0,self.screen:scale()/10,self.screen:scale()/10)
-        love.graphics.setBlendMode("alpha")
-    end
+--     love.graphics.setCanvas()
+-- --     love.graphics.setBlendMode("alpha", "premultiplied")
+--     love.graphics.setColor(255,255,255,255)
+--     love.graphics.draw(self.PXL.screen.canvas, self.screen:offset(),0,0, self.screen:scale(), self.screen:scale())
+--     if self.fx.crt then
+--         love.graphics.setBlendMode("multiply")
+--         love.graphics.draw(self.pixelimg,self.screen:offset(),0,0,self.screen:scale()/10,self.screen:scale()/10)
+--         love.graphics.setBlendMode("alpha")
+--     end
 end
 return M
