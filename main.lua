@@ -1,4 +1,5 @@
 local timer = require("timer")
+local shine = require('lib.shine')
 local games = {}
 -- games['pong'] = require("games.pong.main")
 -- games['pong'].cwd = 'games/pong/'
@@ -19,6 +20,17 @@ function games:prev()
     return self[(self.selected - 1) > 0 and (self.selected - 1) or #self] --rollback decrement
 end
 local PXL = {}
+PXL.options={--setting here!
+    fx = { --cpu filters
+        crt = true,
+        grain = true
+    },
+    anim = {
+        intro = 500,
+        btn = 100,
+        slide = 250
+    }
+}
 PXL.screen = {
     x = 64,--internal render size
     y = 48,
@@ -48,18 +60,40 @@ PXL.anim = {--animation data etc.
 }
 
 function love.load()
-    --generat setup
+    --generic setup
     PXL.screen.canvas = love.graphics.newCanvas(PXL.screen.x,PXL.screen.y)
-    PXL.timers.intro = timer:new(300)
-    PXL.timers.arrow = timer:new(100)
+    PXL.timers.intro = timer:new(PXL.options.anim.intro)
+    PXL.timers.arrow = timer:new(PXL.options.anim.btn)
     PXL.timers.arrow:pause()
-    PXL.timers.slide = timer:new(500)
+    PXL.timers.slide = timer:new(PXL.options.anim.slide)
     PXL.timers.slide:pause()
+    
+    --FX
+    local grain = shine.filmgrain()
+    local crt = shine.crt()
+    local separate_chroma = shine.separate_chroma()
+    local scanlines = shine.scanlines()
+    local glow = shine.glowsimple()
+    grain.opacity = 0.3
+    grain.grainsize = 10
+--     crt.y = 0.05
+--     crt.x = 0.05
+    separate_chroma.angle = 0.2
+    separate_chroma.radius = 0
+    scanlines.pixel_size=PXL.screen:scale()
+    scanlines.line_height=0.3
+    scanlines.opacity = 0.2
+    glow.min_luma = 0.2
+    glow.sigma = 10
+    
+--     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
+    PXL.post_effect = separate_chroma:chain(scanlines):chain(crt):chain(glow)
     
     --include resources
     PXL.images.banner = love.graphics.newImage("images/banner.png")
     PXL.images.arrow = love.graphics.newImage("images/arrow.png")
     PXL.images.deco1 = love.graphics.newImage("images/deco1.png")
+    PXL.images.crt = love.graphics.newImage("images/pixelmask.png")
     PXL.font = love.graphics.newFont("fonts/AerxFont.ttf", 16)
     
      --create color palette
@@ -163,8 +197,9 @@ function love.update(dt)
         games:active():update(dt)
     end
 end
-function love.draw()
+local function draw()
 --  the canvas is also used by the modules
+    local old_canvas = love.graphics.getCanvas()--for compatibillity with shine
     PXL.screen.canvas:setFilter('nearest', 'nearest', 0)
     love.graphics.setCanvas(PXL.screen.canvas)
     love.graphics.setDefaultFilter('nearest', 'nearest', 0)
@@ -198,8 +233,27 @@ function love.draw()
         games:active():draw()
     end
     
-    love.graphics.setCanvas()
---     love.graphics.setBlendMode("alpha", "multiply")
+    if PXL.options.fx.grain then
+        for y=0,PXL.screen.y do
+            for x=0,PXL.screen.x do
+                local color = math.random(0,255)
+                love.graphics.setColor(color,color,color,15)
+                love.graphics.rectangle('fill',x+PXL.screen:offset(),y,1,1)
+            end
+        end
+    end
+    
+    love.graphics.setCanvas(old_canvas)
+    love.graphics.setBlendMode("alpha", "premultiplied")
     love.graphics.setColor(255,255,255,255)--reset color
     love.graphics.draw(PXL.screen.canvas, PXL.screen:offset(),0,0, PXL.screen:scale(), PXL.screen:scale())
+    
+    if PXL.options.fx.crt then
+        love.graphics.setBlendMode("multiply")
+        love.graphics.draw(PXL.images.crt,PXL.screen:offset(),0,0,PXL.screen:scale()/10,PXL.screen:scale()/10)
+        love.graphics.setBlendMode("alpha")
+    end
+end
+function love.draw()
+    PXL.post_effect:draw(draw)
 end

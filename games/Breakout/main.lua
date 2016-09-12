@@ -1,5 +1,5 @@
 local M = {
-name = "Dummy"
+name = "Breakout"
 }
 
 function M:load()

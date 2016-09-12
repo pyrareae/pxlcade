@@ -1,9 +1,8 @@
 local M = {}
 M.name = "Pong"
 M.fx = {
-    crt = true,
-    trail = false,
-    sparkle = false,
+    trail = true,
+    sparkle = true,
     grain = true
 }
 M.player1 = {
@@ -78,7 +77,7 @@ function M:load()
         bounce = love.audio.newSource(cwd.."bounce.wav")
     }
     self.kittyimg = love.graphics.newImage(cwd.."kitty.png")
-    self.pixelimg = love.graphics.newImage(cwd.."pixelmask.png")
+--     self.pixelimg = love.graphics.newImage(cwd.."pixelmask.png")
     love.mouse.setVisible(false)
     local spk = love.graphics.newImage(cwd.."spark.png")
     self.trail = love.graphics.newParticleSystem(spk, 60)
@@ -87,7 +86,7 @@ function M:load()
     self.trail:setSizes(0.3, 1)
     self.trail:setSizeVariation(1)
     self.trail:setLinearAcceleration(-20,-20,20,20)
-    self.trail:setColors(170,50,255,255,255,0,0,0)
+    self.trail:setColors(170,50,255,255,255,0,0,180)
     self:initgame()
 end
 
@@ -117,7 +116,7 @@ end
 
 function M:update(dt)
     if self.fx.trail then
-        trail:update(dt)
+        self.trail:update(dt)
     end
     --misc input
     if love.keyboard.isDown('q') then
@@ -290,7 +289,7 @@ function M:draw()
         end
         if self.fx.trail then 
             self.trail:setPosition(self.ball.x+self.ball.size/2, self.ball.y+self.ball.size/2)
-            love.graphics.draw(trail, 0,0)
+            love.graphics.draw(self.trail, 0,0)
         end
         --draw paddles
         love.graphics.setColor(self.multiplayer and self.colors.pink or self.colors.white)
