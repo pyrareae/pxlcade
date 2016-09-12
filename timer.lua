@@ -1,5 +1,5 @@
 local T = {--class vars
-    timers = {}--keep track of all timers (useful for 'ticking' all of them)
+--     timers = {}--keep track of all timers (useful for 'ticking' all of them, if callback are needed)
 }
 T.__index = T
 function T.millis()
@@ -11,11 +11,31 @@ function T:new(time)
     o.timer = time or 0
     o.last = self.millis()
     o.fired = false
-    self.timers[#self.timers+1] = o --save this into list
+    o.stopped = false
+--     self.timers[#self.timers+1] = o --save this into list
     return o
 end
 
+function T:pause() -- suspend countdown
+    self.stopped = true
+    self._remaining = self:remaining() -- save current remaining time
+end
+
+function T:resume() -- restart countdown
+    self.stopped = false
+    self.last = self.millis()-self._remaining
+end
+
+function T:start(time) --resume + reset
+    if time then
+        self.timer = time
+    end
+    self:resume()
+    self:reset()
+end
+
 function T:check(time) -- check by argument or time provided in constructor
+    if self.stopped then return false end
     local now = self.millis()
     local time = time or self.timer
     return time+self.last < now
@@ -26,6 +46,7 @@ function T:once(time) -- only return true once after time elapsed
         self.fired = true
         return true
     end
+    return false
 end
 
 function T:every(time) -- repeat the timer over and over
@@ -33,6 +54,7 @@ function T:every(time) -- repeat the timer over and over
         self:reset()
         return true
     end
+    return false
 end
 
 function T:reset() --reset the timer
@@ -42,7 +64,7 @@ end
 
 function T:remaining(time) --return remaining time in millis
     local time = time or self.timer
-    return self.millis() - (self.last + time)
+    return (self.last + time)-self.millis()
 end
 
 return T
