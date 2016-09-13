@@ -68,4 +68,12 @@ function T:remaining(time) --return remaining time in millis
     return (self.last + time)-self.millis()
 end
 
+function T:percent(down) --count up or down in range 0-1
+    if down then
+        return self:remaining()/self.timer
+    else
+        return (self.timer-self:remaining())/self.timer
+    end
+end
+
 return T

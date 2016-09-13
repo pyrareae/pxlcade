@@ -28,7 +28,8 @@ PXL.options={--setting here!
     anim = {
         intro = 500,
         btn = 100,
-        slide = 250
+        slide = 250,
+        text = 150
     }
 }
 PXL.screen = {
@@ -47,7 +48,7 @@ PXL.screen = {
 function GotoMenu() --return to main menu, call from subgames
     PXL.state="menu"
 end
-PXL.state = 'game'
+PXL.state = 'menu'
 PXL.images = {}
 PXL.timers = {}
 PXL.states = { --substates
@@ -56,7 +57,8 @@ PXL.states = { --substates
 }
 PXL.anim = {--animation data etc.
     arrow = {left=0,right=0, rcolor = {255,255,255}, lcolor={255,255,255}},
-    slide = {offset=nil, imga = nil, imgb = nil}
+    slide = {offset=nil, imga = nil, imgb = nil},
+    text  = {text = '', offset = 0, state = 'final'}--putting state here just cause it makes more sense
 }
 
 function love.load()
@@ -67,6 +69,7 @@ function love.load()
     PXL.timers.intro = timer:new(PXL.options.anim.intro)
     PXL.timers.arrow = timer:new(PXL.options.anim.btn):pause()
     PXL.timers.slide = timer:new(PXL.options.anim.slide):pause()
+    PXL.timers.text  = timer:new(PXL.options.anim.text/2):pause()
     
     --FX
 --     local grain = shine.filmgrain()
@@ -143,10 +146,12 @@ function love.keypressed(key, screencode, isrepeat)
             games:gotoNext()
             PXL.states.arrow = "right out"
             PXL.states.slide = "next"
+            PXL.anim.text.state = 'start'
         elseif key == "left" then
             games:gotoPrev()
             PXL.states.arrow = "left out"
             PXL.states.slide = "prev"
+            PXL.anim.text.state = 'start'
         elseif key == 'q' then
             love.event.push('quit')
         end
@@ -202,6 +207,27 @@ function love.update(dt)
         if PXL.timers.slide:once() then --anim finished
             PXL.states.slide = 'idle'
         end
+        --text anim
+        if PXL.anim.text.state == 'start' then
+            PXL.timers.text:start()
+            PXL.anim.text.state = "down"
+        end if PXL.anim.text.state == 'down' then
+            PXL.anim.text.offset = PXL.timers.text:percent()*8
+            if PXL.timers.text:check() then
+                PXL.timers.text:start()
+                PXL.anim.text.state = "up"
+                PXL.anim.text.text = games:active().name
+            end
+        elseif PXL.anim.text.state == 'up' then 
+            PXL.anim.text.offset = PXL.timers.text:percent(true)*8
+            if PXL.timers.text:check() then
+                PXL.anim.text.state = 'final'
+            end
+        end if PXL.anim.text.state == 'final' then
+            PXL.anim.text.text = games:active().name --for init
+            PXL.anim.text.offset = 0
+            PXL.anim.state = 'idle'
+        end
     elseif PXL.state == 'game' and games:active().update then
         games:active():update(dt)
     end
@@ -222,14 +248,16 @@ local function draw()
             love.graphics.draw(PXL.anim.slide.imga, 8-PXL.anim.slide.offset,1)
             love.graphics.draw(PXL.anim.slide.imgb, 68-PXL.anim.slide.offset,1)
         end
-        love.graphics.setColor(PXL.colors.purple[2])
-        love.graphics.rectangle("fill", 1, 38, PXL.screen.x-2,1)
+        love.graphics.setColor(PXL.colors.purple[3])
+        love.graphics.rectangle("fill", 1, 38, PXL.screen.x-2,20, 5, 4)--divider line / bg
+        love.graphics.setColor(PXL.colors.gray[1])
+        local namelen = PXL.font:getWidth(PXL.anim.text.text)
+        love.graphics.printf(PXL.anim.text.text, 1, 37+PXL.anim.text.offset, PXL.screen.x,'center')--shadow text
         love.graphics.setColor(PXL.colors.gray[6])
-        local namelen = PXL.font:getWidth(games:active().name)
-        love.graphics.printf(games:active().name, 0, 38-2, PXL.screen.x,'center')
-        love.graphics.setColor(PXL.colors.purple[2])
-        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2-namelen/2-2, 42, 0, 1, 1, 2, 0)
-        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2+namelen/2+2, 42, 0, 1, 1, 2, 0)
+        love.graphics.printf(PXL.anim.text.text, 0, 36+PXL.anim.text.offset, PXL.screen.x,'center')--game name
+        love.graphics.setColor(PXL.colors.blue[4])
+        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2-namelen/2-2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)--text decorations
+        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2+namelen/2+2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)
         --arrows
         love.graphics.setColor(PXL.anim.arrow.lcolor)
         love.graphics.draw(PXL.images.arrow, 2+PXL.anim.arrow.left,11, 0, -1, 1, 6, 0)

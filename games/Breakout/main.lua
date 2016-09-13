@@ -52,7 +52,7 @@ function M:load()
                 this:move(dt)
             end
             if this.y <=0 or this.y+this.radius*2 >= self.screen.y then
-                if not this.y<=0 then --bottom
+                if not (this.y <= 0) then --bottom
                     state = 'bottom'
                 end
                 this.vel.y = -this.vel.y 
