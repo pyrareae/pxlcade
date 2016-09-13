@@ -4,31 +4,28 @@ name = "Breakout",
 c = {},
 bricks = {}
 }
-local function boxcoll(x,y,xb,yb,x2,y2,x2b,y2b)--box collision check http://gamedev.stackexchange.com/questions/29786/a-simple-2d-rectangle-collision-algorithm-that-also-determines-which-sides-that
-    local w = 0.5*((xb-x)+(x2b-x2))
-    local h = 0.5*((yb-y)+(y2b-y2))
-    local dx = x+(xb-x)/2 - x2+(x2b-x2)/2
-    local dy = y+(yb-y)/2 - y2+(y2b-y2)/2
 
-    if (math.abs(dx) <= w and math.abs(dy) <= h) then
-        local wy = w * dy
-        local hx = h * dx
-
-        if (wy > hx) then
-            if (wy > -hx) then
-                return 'top'
-            else
-                return 'left'
-            end
-        else
-            if (wy > -hx) then
-                return 'right'
-            else
-                return 'bottom'
+local function boxcoll(x,y,xb,yb,x2,y2,x2b,y2b)--box collision
+    if x < x2b and
+         x2 < xb and
+         y < y2b and
+         y2 < yb then
+--         local a = {x = x+(xb-x)/2, y = y+(yb-y)/2}
+--         local b = {x = x2+(x2b-x2)/2, y = y2+(y2b-y2)/2}
+        local pen = {up = 0, down = 0, right = 0, left = 0}
+        pen['up'] = y - y2b
+        pen['down'] = yb - y2
+        pen['left'] = x - x2b
+        pen['right'] = xb - x2
+        local res = {'', 999}
+        for k,v in pairs(pen) do
+            print(k..math.abs(v))
+            if res[2] > math.abs(v) then
+                res = {k, math.abs(v)}
             end
         end
+        return res[1]
     end
-    return nil
 end
 local Brick = {
     new = function(self, color, x, y, xb, yb)
@@ -76,7 +73,7 @@ function M:load()
         x = self.screen.x/2,
         y = self.screen.y-4,
         size = {x=15,y=2},
-        speed = 100,
+        speed = 60,
         getx = function(self)
             return math.floor(self.x-self.size.x/2)
         end,
@@ -113,6 +110,8 @@ function M:load()
             if this:gety()+this.radius+1 >= self.player.y and this:getx()+this.radius >= self.player.x and this:getx()-this.radius < self.player.x+self.player.size.x then
                 this.y = self.player.y-(this.radius*2+1)
                 this.vel.y = -this.vel.y
+                local veer = (this:getx() - (self.player.x+self.player.size.x/2))*4
+                this.vel.x = (this.vel.x + veer*2)/3
                 this:move(dt)
                 self.c.ball = self.c.paddle
             end
@@ -120,21 +119,21 @@ function M:load()
             for i, row in ipairs(self.bricks) do
                 for i2, brick in ipairs(row) do
                     local side = nil
-                    if brick then side = boxcoll(brick.pos.x, brick.pos.y, brick.pos.xb, brick.pos.yb, this.x, this.y, this.x+2*this.radius, this.y+2*this.radius) end
+                    if brick then side = boxcoll(this.x, this.y, this.x+this.radius*2+1, this.y+this.radius*2+1, brick.pos.x, brick.pos.y, brick.pos.xb, brick.pos.yb) end
                     if side then
                         print(side)
-                        if side == "bottom" then
+                        if side == "up" then--top
                             this.vel.y = - this.vel.y
---                             this.y = brick.pos.yb+1
-                        elseif side == "top" then
+                            this.y = brick.pos.yb+1
+                        elseif side == "down" then--bottom
                             this.vel.y = - this.vel.y
---                             this.y = brick.pos.y - (2*this.radius+1)
-                        elseif side == "right" then
+                            this.y = brick.pos.y - (2*this.radius+1)
+                        elseif side == "left" then--right
                             this.vel.x = - this.vel.x
---                             this.x = brick.pos.x + (2*this.radius+1)
-                        elseif side == "left" then
+                            this.x = brick.pos.xb+1
+                        elseif side == "right" then--left
                             this.vel.x = - this.vel.x
---                             this.x = brick.pos.xb+1
+                            this.x = brick.pos.x-this.radius*2-2
                         end
                         this:move(dt, true)
                         self.c.ball = brick.color
@@ -161,6 +160,9 @@ function M:keypressed(key, sc, r)
     
 end
 function M:update(dt)
+    if love.keyboard.isDown("p") then---'pause' for debug
+        return
+    end
     self.ball:move(dt)
     if love.keyboard.isDown("right") then
         self.player.x = inc(self.player.x, self.player.speed*dt, 1, self.screen.x-self.player.size.x)
