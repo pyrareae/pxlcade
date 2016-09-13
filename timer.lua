@@ -19,6 +19,7 @@ end
 function T:pause() -- suspend countdown
     self.stopped = true
     self._remaining = self:remaining() -- save current remaining time
+    return self
 end
 
 function T:resume() -- restart countdown

@@ -47,7 +47,7 @@ PXL.screen = {
 function GotoMenu() --return to main menu, call from subgames
     PXL.state="menu"
 end
-PXL.state = 'intro'
+PXL.state = 'game'
 PXL.images = {}
 PXL.timers = {}
 PXL.states = { --substates
@@ -61,33 +61,33 @@ PXL.anim = {--animation data etc.
 
 function love.load()
     --generic setup
+    love.mouse.setVisible(false)
     PXL.screen.canvas = love.graphics.newCanvas(PXL.screen.x,PXL.screen.y)
+    --timers
     PXL.timers.intro = timer:new(PXL.options.anim.intro)
-    PXL.timers.arrow = timer:new(PXL.options.anim.btn)
-    PXL.timers.arrow:pause()
-    PXL.timers.slide = timer:new(PXL.options.anim.slide)
-    PXL.timers.slide:pause()
+    PXL.timers.arrow = timer:new(PXL.options.anim.btn):pause()
+    PXL.timers.slide = timer:new(PXL.options.anim.slide):pause()
     
     --FX
-    local grain = shine.filmgrain()
-    local crt = shine.crt()
-    local separate_chroma = shine.separate_chroma()
-    local scanlines = shine.scanlines()
-    local glow = shine.glowsimple()
-    grain.opacity = 0.3
-    grain.grainsize = 10
---     crt.y = 0.05
---     crt.x = 0.05
-    separate_chroma.angle = 0.2
-    separate_chroma.radius = 0
-    scanlines.pixel_size=PXL.screen:scale()
-    scanlines.line_height=0.3
-    scanlines.opacity = 0.2
-    glow.min_luma = 0.2
-    glow.sigma = 10
-    
---     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
-    PXL.post_effect = separate_chroma:chain(scanlines):chain(crt):chain(glow)
+--     local grain = shine.filmgrain()
+--     local crt = shine.crt()
+--     local separate_chroma = shine.separate_chroma()
+--     local scanlines = shine.scanlines()
+--     local glow = shine.glowsimple()
+--     grain.opacity = 0.3
+--     grain.grainsize = 10
+-- --     crt.y = 0.05
+-- --     crt.x = 0.05
+--     separate_chroma.angle = 0.2
+--     separate_chroma.radius = 0
+--     scanlines.pixel_size=PXL.screen:scale()
+--     scanlines.line_height=0.3
+--     scanlines.opacity = 0.2
+--     glow.min_luma = 0.2
+--     glow.sigma = 10
+--     
+-- --     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
+--     PXL.post_effect = separate_chroma:chain(scanlines):chain(crt):chain(glow)
     
     --include resources
     PXL.images.banner = love.graphics.newImage("images/banner.png")
@@ -123,7 +123,16 @@ function love.load()
         games[k].screen = PXL.screen--give the module screen a ref to screen
         games[k].PXL = PXL
     end
---     games[selected]:load()
+    --is state is shorted to 'game' on init
+    if PXL.state == 'game' then
+        games:active():load()
+        PXL.timers.intro:pause()
+    end
+end
+function love.mousemoved( x, y, dx, dy, istouch )
+    if PXL.state == 'game' and games:active().mousemoved then
+        games:active().mousemoved(x,y,dx,dy,istouch)
+    end
 end
 function love.keypressed(key, screencode, isrepeat)
     if PXL.state == 'menu' and not isrepeat then
@@ -254,6 +263,7 @@ local function draw()
         love.graphics.setBlendMode("alpha")
     end
 end
-function love.draw()
-    PXL.post_effect:draw(draw)
-end
+love.draw = draw
+-- function love.draw()
+--     PXL.post_effect:draw(draw)
+-- end

@@ -78,7 +78,6 @@ function M:load()
     }
     self.kittyimg = love.graphics.newImage(cwd.."kitty.png")
 --     self.pixelimg = love.graphics.newImage(cwd.."pixelmask.png")
-    love.mouse.setVisible(false)
     local spk = love.graphics.newImage(cwd.."spark.png")
     self.trail = love.graphics.newParticleSystem(spk, 60)
     self.trail:setParticleLifetime(1,2)
