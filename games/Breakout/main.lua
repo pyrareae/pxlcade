@@ -5,6 +5,20 @@ c = {},
 bricks = {}
 }
 
+function shallowcopy(orig) -- http://lua-users.org/wiki/CopyTable
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in pairs(orig) do
+            copy[orig_key] = orig_value
+        end
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
 local function boxcoll(x,y,xb,yb,x2,y2,x2b,y2b)--box collision
     if x < x2b and
          x2 < xb and
@@ -84,6 +98,28 @@ function M:load()
     self.state = 'run'
     --init ball
     self.ball = {
+        traillen = 5,
+        trail = {},
+        draw = function(this)
+--             print('----')
+            local x,y, lx, ly = math.floor(this.x), math.floor(this.y)
+            if this.trail[1] then
+                lx, ly = math.abs(this.trail[1].x), math.abs(this.trail[1].y)
+            end
+--             print((x ~= lx and y ~= ly))
+            if (x ~= lx or y ~= ly) then
+                if #this.trail >= this.traillen then table.remove(this.trail, this.traillen) end
+                table.insert(this.trail,1,{x=x,y=y,color=self.c.ball})
+            end
+            for i=#this.trail,1,-1 do
+                local b = this.trail[i]
+                local color = shallowcopy(b.color)
+                color[4] = i ~= 1 and 50 or 255
+                love.graphics.setColor(color)
+                love.graphics.rectangle('fill', b.x, b.y, 1+this.radius*2, 1+this.radius*2)
+                color = nil
+            end
+        end,
         reset = function(this)
             this.x = self.screen.x/2
             this.y = self.screen.y*0.75
@@ -177,8 +213,9 @@ function M:draw()
     love.graphics.setLineWidth(1)
     love.graphics.setLineStyle('rough')
     --draw ball
-    love.graphics.setColor(self.c.ball)
-    love.graphics.rectangle('fill', self.ball.x, self.ball.y, 1+self.ball.radius*2, 1+self.ball.radius*2)
+    self.ball:draw()
+--     love.graphics.setColor(self.c.ball)
+--     love.graphics.rectangle('fill', self.ball.x, self.ball.y, 1+self.ball.radius*2, 1+self.ball.radius*2)
     --draw paddle
     love.graphics.setColor(self.c.paddle)
     love.graphics.rectangle('line', self.player.x, self.player.y, self.player.size.x, self.player.size.y)
