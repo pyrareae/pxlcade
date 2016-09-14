@@ -225,22 +225,23 @@ function M:keypressed(key, sc, r)
     end
 end
 function M:update(dt)
+    if love.keyboard.isDown('q') then
+        GotoMenu()
+    end
+    if self.state == 'dead' then return end
     self.ball:move(dt)
     if love.keyboard.isDown("right") then
         self.player.x = inc(self.player.x, self.player.speed*dt, 1, self.screen.x-self.player.size.x)
     elseif love.keyboard.isDown("left") then
         self.player.x = inc(self.player.x, -self.player.speed*dt, 1, self.screen.x-self.player.size.x)
-    elseif love.keyboard.isDown('q') then
-        GotoMenu()
     end
-    
 end
 function M:draw()
     love.graphics.setLineWidth(1)
     love.graphics.setLineStyle('rough')
     --game over screen
     if self.state == 'dead' then
-        love.graphics.printf({self.colors.red[2], "Game Over\n", self.colors.white, string.format("Score: %d\nRestart..R\nQuit..Q", self.score.points)}, 0, 1, self.screen.x, 'center')
+        love.graphics.printf({self.PXL.colors.red[2], "Game Over\n", self.PXL.colors.gray[6], string.format("Score: %d\nRestart..R\nQuit..Q", self.player.score.points)}, 0, 1, self.screen.x, 'center')
         return
     end
     --draw text
