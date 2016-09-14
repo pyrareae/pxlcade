@@ -33,7 +33,7 @@ local function boxcoll(x,y,xb,yb,x2,y2,x2b,y2b)--box collision
         pen['right'] = xb - x2
         local res = {'', 999}
         for k,v in pairs(pen) do
-            print(k..math.abs(v))
+--             print(k..math.abs(v))
             if res[2] > math.abs(v) then
                 res = {k, math.abs(v)}
             end
@@ -81,10 +81,12 @@ end
 function M:load()
     --setup main colors
     self.c.ball = self.PXL.colors.blue[2]
-    self.c.paddle = self.PXL.colors.gray[6]
+--     self.c.paddle = self.PXL.colors.gray[6]
+    self.c.paddle = self.PXL.colors[math.random(2,7)][4]
     --init player
     self.player = {
-        x = self.screen.x/2,
+        score = {points = 0, lives = 3, deaths = 0},
+        x = nil,
         y = self.screen.y-4,
         size = {x=15,y=2},
         speed = 60,
@@ -93,20 +95,26 @@ function M:load()
         end,
         gety = function(self)
             return math.floor(self.y-self.size.y/2)
+        end,
+        die = function(this)
+            this.score.deaths = this.score.deaths + 1
+            if this.score.deaths > this.score.lives then
+                self.state = 'dead'
+            end
         end
     }
+    self.player.x = self.screen.x/2 - self.player.size.x/2
     self.state = 'run'
     --init ball
     self.ball = {
+        bounce = love.audio.newSource(self.cwd.."bounce.wav"),
         traillen = 5,
         trail = {},
         draw = function(this)
---             print('----')
-            local x,y, lx, ly = math.floor(this.x), math.floor(this.y)
+            local x,y, lx, ly = math.floor(this.x+0.5), math.floor(this.y+0.5)
             if this.trail[1] then
-                lx, ly = math.abs(this.trail[1].x), math.abs(this.trail[1].y)
+                lx, ly = this.trail[1].x, this.trail[1].y
             end
---             print((x ~= lx and y ~= ly))
             if (x ~= lx or y ~= ly) then
                 if #this.trail >= this.traillen then table.remove(this.trail, this.traillen) end
                 table.insert(this.trail,1,{x=x,y=y,color=self.c.ball})
@@ -134,13 +142,18 @@ function M:load()
             if this.x <=0 or this.x+this.radius*2 >= self.screen.x then
                 this.vel.x = -this.vel.x
                 this:move(dt)
+                this.bounce:setPitch(1.2)
+                this.bounce:play()
             end
             if this.y <=0 or this.y+this.radius*2 >= self.screen.y then
                 if not (this.y <= 0) then --bottom
-                    state = 'bottom'
+                    self.player:die()
+                    this:reset()
                 end
                 this.vel.y = -this.vel.y 
                 this:move(dt)
+                this.bounce:setPitch(1.3)
+                this.bounce:play()
             end
             --check for paddle
             if this:gety()+this.radius+1 >= self.player.y and this:getx()+this.radius >= self.player.x and this:getx()-this.radius < self.player.x+self.player.size.x then
@@ -150,14 +163,18 @@ function M:load()
                 this.vel.x = (this.vel.x + veer*2)/3
                 this:move(dt)
                 self.c.ball = self.c.paddle
+                this.bounce:setPitch(1.5)
+                this.bounce:play()
             end
             --check for bricks
+            local bricks = false
             for i, row in ipairs(self.bricks) do
                 for i2, brick in ipairs(row) do
+                    bricks = true
                     local side = nil
                     if brick then side = boxcoll(this.x, this.y, this.x+this.radius*2+1, this.y+this.radius*2+1, brick.pos.x, brick.pos.y, brick.pos.xb, brick.pos.yb) end
                     if side then
-                        print(side)
+--                         print(side)
                         if side == "up" then--top
                             this.vel.y = - this.vel.y
                             this.y = brick.pos.yb+1
@@ -171,14 +188,24 @@ function M:load()
                             this.vel.x = - this.vel.x
                             this.x = brick.pos.x-this.radius*2-2
                         end
+                        --hit brick, do hit brick stuff here
                         this:move(dt, true)
+                        this.bounce:setPitch(1.7)
+                        this.bounce:play()
                         self.c.ball = brick.color
+                        self.player.score.points = self.player.score.points+1
                         table.remove(self.bricks[i], i2)
                     end
                 end
             end
+            if not bricks then 
+                local vel = this.vel.y*1.25
+                this:reset()
+                self:buildbricks()
+                this.vel.y = vel
+            end
         end,
-        move = function(this, dt, nocheck)
+        move = function(this, dt, nocheck) --NOTE: there is a bug where up speed is greater than down speed
             this.x = inc(this.x, this.vel.x*dt, 0, this.x+this.radius*2)
             this.y = inc(this.y, this.vel.y*dt, 0, this.y+this.radius*2)
             if not nocheck then
@@ -193,12 +220,11 @@ function M:mousemoved(x,y,dx,dy,touch)
     
 end
 function M:keypressed(key, sc, r)
-    
+    if key == 'r' and not r then
+        self:load()
+    end
 end
 function M:update(dt)
-    if love.keyboard.isDown("p") then---'pause' for debug
-        return
-    end
     self.ball:move(dt)
     if love.keyboard.isDown("right") then
         self.player.x = inc(self.player.x, self.player.speed*dt, 1, self.screen.x-self.player.size.x)
@@ -212,6 +238,15 @@ end
 function M:draw()
     love.graphics.setLineWidth(1)
     love.graphics.setLineStyle('rough')
+    --game over screen
+    if self.state == 'dead' then
+        love.graphics.printf({self.colors.red[2], "Game Over\n", self.colors.white, string.format("Score: %d\nRestart..R\nQuit..Q", self.score.points)}, 0, 1, self.screen.x, 'center')
+        return
+    end
+    --draw text
+    love.graphics.setColor(self.PXL.colors.gray[3])
+    love.graphics.printf("score: "..self.player.score.points, 0, 23, self.screen.x, 'center')
+    love.graphics.printf(string.format("lives: %i/%i", self.player.score.lives-self.player.score.deaths, self.player.score.lives), 0, 30, self.screen.x, 'center')
     --draw ball
     self.ball:draw()
 --     love.graphics.setColor(self.c.ball)

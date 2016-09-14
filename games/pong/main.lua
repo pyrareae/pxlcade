@@ -247,7 +247,7 @@ function M:draw()
     
     if not self.alive then
         love.graphics.setColor(self.colors.white)
-        love.graphics.printf({{255,75,75}, "Game Over\n", self.colors.white, string.format("%d:%d\nRestart..R\nQuit..Q", self.score.cpu, self.score.player)}, 0, 1, self.screen.x, 'center')
+        love.graphics.printf({self.colors.red[2], "Game Over\n", self.colors.white, string.format("%d:%d\nRestart..R\nQuit..Q", self.score.cpu, self.score.player)}, 0, 1, self.screen.x, 'center')
     elseif self.inmenu then
         love.graphics.setColor(self.colors.violet)
         love.graphics.printf("Pong", 0, 5, self.screen.x, 'center')
