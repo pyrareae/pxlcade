@@ -122,7 +122,11 @@ function love.load()
         print(k..": "..name)
         games[k] = require("games."..name..".main")
         games[k].cwd = "games/"..name.."/" -- tell the module it's directory path
-        games[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
+        if love.filesystem.exists("games/"..name.."/icon.png") then
+            games[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
+        else
+            games[k].icon = love.graphics.newImage("images/no_icon.png")
+        end
         games[k].screen = PXL.screen--give the module screen a ref to screen
         games[k].PXL = PXL
     end

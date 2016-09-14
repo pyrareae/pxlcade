@@ -78,7 +78,7 @@ local function inc(num, amount, a, b, rollback)--smart incrementer
     end
     return num
 end
-function M:load()
+function M:load()--this is basically a closure style constructor for ball and player
     --setup main colors
     self.c.ball = self.PXL.colors.blue[2]
 --     self.c.paddle = self.PXL.colors.gray[6]
