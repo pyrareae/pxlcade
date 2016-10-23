@@ -2,6 +2,7 @@ local timer = require("timer")
 local shine = require('lib.shine')
 local PXL = {}
 local games = {}
+local inspect = require('lib.inspect')
 
 games.selected = 1
 PXL.state = 'menu'
@@ -20,10 +21,12 @@ end
 function games:prev()
     return self[(self.selected - 1) > 0 and (self.selected - 1) or #self] --rollback decrement
 end
+PXL.lastres = {0,0}
 PXL.options={--setting here!
-    fx = { --cpu filters
+    fx = { -- filters
         crt = true,
-        grain = true
+        grain = false,
+        gpugrain = true
     },
     anim = {
         intro = 500,
@@ -60,6 +63,27 @@ PXL.anim = {--animation data etc.
     text  = {text = '', offset = 0, state = 'final'}--putting state here just cause it makes more sense
 }
 
+local function buildFX() --setup shader FX
+    --FX
+    local crt = shine.crt()
+    local separate_chroma = shine.separate_chroma()
+--     local scanlines = shine.scanlines()
+    local glow = shine.glowsimple()
+--     crt.y = 0.05
+--     crt.x = 0.05
+    separate_chroma.angle = 0.2
+    separate_chroma.radius = 0
+--     scanlines.pixel_size=PXL.screen:scale()
+--     scanlines.line_height=0.3
+--     scanlines.opacity = 0.2
+    crt._x_distortion, crt._y_distortion = 0.03, 0.0325
+    glow.min_luma = 0.2
+    glow.sigma = 10
+    
+--     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
+    PXL.post_effect = separate_chroma:chain(crt):chain(glow)
+end
+
 function love.load()
     --generic setup
     love.mouse.setVisible(false)
@@ -70,26 +94,16 @@ function love.load()
     PXL.timers.slide = timer:new(PXL.options.anim.slide):pause()
     PXL.timers.text  = timer:new(PXL.options.anim.text/2):pause()
     
-    --FX
---     local grain = shine.filmgrain()
---     local crt = shine.crt()
---     local separate_chroma = shine.separate_chroma()
---     local scanlines = shine.scanlines()
---     local glow = shine.glowsimple()
---     grain.opacity = 0.3
---     grain.grainsize = 10
--- --     crt.y = 0.05
--- --     crt.x = 0.05
---     separate_chroma.angle = 0.2
---     separate_chroma.radius = 0
---     scanlines.pixel_size=PXL.screen:scale()
---     scanlines.line_height=0.3
---     scanlines.opacity = 0.2
---     glow.min_luma = 0.2
---     glow.sigma = 10
---     
--- --     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
---     PXL.post_effect = separate_chroma:chain(scanlines):chain(crt):chain(glow)
+    --build grain FX
+    if PXL.options.fx.gpugrain then
+        PXL.grain = shine.filmgrain()
+        PXL.grain.opacity = 0.3
+        PXL.grain.grainsize = 1
+    else
+        PXL.grain = false
+    end
+    
+    buildFX()--init other fx
     
     --include resources
     PXL.images.banner = love.graphics.newImage("images/banner.png")
@@ -121,13 +135,14 @@ function love.load()
         print(k..": "..name)
         games[k] = require("games."..name..".main")
         games[k].cwd = "games/"..name.."/" -- tell the module it's directory path
-        if love.filesystem.exists("games/"..name.."/icon.png") then
+        if love.filesystem.exists("games/"..name.."/icon.png") then --check for title image
             games[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
         else
             games[k].icon = love.graphics.newImage("images/no_icon.png")
         end
         games[k].screen = PXL.screen--give the module screen a ref to screen
         games[k].PXL = PXL
+    
     end
     --is state is shorted to 'game' on init
     if PXL.state == 'game' then
@@ -163,6 +178,13 @@ function love.keypressed(key, screencode, isrepeat)
     end
 end
 function love.update(dt)
+    local res = {love.graphics.getHeight(), love.graphics.getWidth()}
+    if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
+        buildFX() --the shine libe doesn't update for changing screen sizes itself so we do it here
+        PXL.lastres = res
+        print("fx rebuilt"..inspect(res)..inspect(PXL.lastres))
+    end
+    
     if PXL.timers.intro:once() then
         PXL.state = 'menu'
     end
@@ -244,43 +266,52 @@ local function draw()
     love.graphics.clear()
     love.graphics.setFont(PXL.font)
     
-    if PXL.state == 'menu' then
-        if PXL.states.slide == 'idle' then
-            love.graphics.draw(games:active().icon, 8,1)
-        else
-            love.graphics.draw(PXL.anim.slide.imga, 8-PXL.anim.slide.offset,1)
-            love.graphics.draw(PXL.anim.slide.imgb, 68-PXL.anim.slide.offset,1)
+    local function smalldraw()
+        if PXL.state == 'menu' then
+            if PXL.states.slide == 'idle' then
+                love.graphics.draw(games:active().icon, 8,1)
+            else
+                love.graphics.draw(PXL.anim.slide.imga, 8-PXL.anim.slide.offset,1)
+                love.graphics.draw(PXL.anim.slide.imgb, 68-PXL.anim.slide.offset,1)
+            end
+            love.graphics.setColor(PXL.colors.purple[3])
+            love.graphics.rectangle("fill", 1, 38, PXL.screen.x-2,20, 5, 4)--divider line / bg
+            love.graphics.setColor(PXL.colors.gray[1])
+            local namelen = PXL.font:getWidth(PXL.anim.text.text)
+            love.graphics.printf(PXL.anim.text.text, 1, 37+PXL.anim.text.offset, PXL.screen.x,'center')--shadow text
+            love.graphics.setColor(PXL.colors.gray[6])
+            love.graphics.printf(PXL.anim.text.text, 0, 36+PXL.anim.text.offset, PXL.screen.x,'center')--game name
+            love.graphics.setColor(PXL.colors.blue[4])
+            love.graphics.draw(PXL.images.deco1, PXL.screen.x/2-namelen/2-2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)--text decorations
+            love.graphics.draw(PXL.images.deco1, PXL.screen.x/2+namelen/2+2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)
+            --arrows
+            love.graphics.setColor(PXL.anim.arrow.lcolor)
+            love.graphics.draw(PXL.images.arrow, 2+PXL.anim.arrow.left,11, 0, -1, 1, 6, 0)
+            love.graphics.setColor(PXL.anim.arrow.rcolor)
+            love.graphics.draw(PXL.images.arrow, 56+PXL.anim.arrow.right,11)
+            love.graphics.setColor(PXL.colors.gray[6])
+        elseif PXL.state == 'intro' then
+            love.graphics.draw(PXL.images.banner, 0,0)
+        elseif PXL.state == 'game' then
+            games:active():draw()
         end
-        love.graphics.setColor(PXL.colors.purple[3])
-        love.graphics.rectangle("fill", 1, 38, PXL.screen.x-2,20, 5, 4)--divider line / bg
-        love.graphics.setColor(PXL.colors.gray[1])
-        local namelen = PXL.font:getWidth(PXL.anim.text.text)
-        love.graphics.printf(PXL.anim.text.text, 1, 37+PXL.anim.text.offset, PXL.screen.x,'center')--shadow text
-        love.graphics.setColor(PXL.colors.gray[6])
-        love.graphics.printf(PXL.anim.text.text, 0, 36+PXL.anim.text.offset, PXL.screen.x,'center')--game name
-        love.graphics.setColor(PXL.colors.blue[4])
-        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2-namelen/2-2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)--text decorations
-        love.graphics.draw(PXL.images.deco1, PXL.screen.x/2+namelen/2+2, 42+PXL.anim.text.offset, 0, 1, 1, 2, 0)
-        --arrows
-        love.graphics.setColor(PXL.anim.arrow.lcolor)
-        love.graphics.draw(PXL.images.arrow, 2+PXL.anim.arrow.left,11, 0, -1, 1, 6, 0)
-        love.graphics.setColor(PXL.anim.arrow.rcolor)
-        love.graphics.draw(PXL.images.arrow, 56+PXL.anim.arrow.right,11)
-        love.graphics.setColor(PXL.colors.gray[6])
-    elseif PXL.state == 'intro' then
-        love.graphics.draw(PXL.images.banner, 0,0)
-    elseif PXL.state == 'game' then
-        games:active():draw()
-    end
-    
-    if PXL.options.fx.grain then
-        for y=0,PXL.screen.y do
-            for x=0,PXL.screen.x do
-                local color = math.random(0,255)
-                love.graphics.setColor(color,color,color,15)
-                love.graphics.rectangle('fill',x+PXL.screen:offset(),y,1,1)
+        
+        if PXL.options.fx.grain then
+            for y=0,PXL.screen.y do
+                for x=0,PXL.screen.x do
+                    local color = math.random(0,255)
+                    love.graphics.setColor(color,color,color,15)
+                    love.graphics.rectangle('fill',x+PXL.screen:offset(),y,1,1)
+                end
             end
         end
+    end
+    
+    --all for the sake of grain...
+    if PXL.grain then
+        PXL.grain:draw(smalldraw)
+    else
+        smalldraw()
     end
     
     love.graphics.setCanvas(old_canvas)
@@ -294,7 +325,7 @@ local function draw()
         love.graphics.setBlendMode("alpha")
     end
 end
-love.draw = draw
--- function love.draw()
---     PXL.post_effect:draw(draw)
--- end
+-- love.draw = draw
+function love.draw()
+    PXL.post_effect:draw(draw)
+end
