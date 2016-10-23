@@ -2,12 +2,9 @@ local timer = require("timer")
 local shine = require('lib.shine')
 local PXL = {}
 local games = {}
--- games['pong'] = require("games.pong.main")
--- games['pong'].cwd = 'games/pong/'
-games.selected = 3
-PXL.state = 'game'
--- games.selected = 1
--- PXL.state = 'menu'
+
+games.selected = 1
+PXL.state = 'menu'
 function games:active()
     return self[self.selected]
 end
