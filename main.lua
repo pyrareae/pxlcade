@@ -2,7 +2,25 @@ local timer = require("timer")
 local shine = require('lib.shine')
 local PXL = {}
 local games = {}
-local inspect = require('lib.inspect')
+--helpers
+PXL.inspect = require('lib.inspect')
+function PXL.shallowcopy(orig) -- http://lua-users.org/wiki/CopyTable
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in pairs(orig) do
+            copy[orig_key] = orig_value
+        end
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+function PXL.round(num, idp)
+  local mult = 10^(idp or 0)
+  return math.floor(num * mult + 0.5) / mult
+end
 
 games.selected = 1
 PXL.state = 'menu'
@@ -86,6 +104,7 @@ end
 
 function love.load()
     --generic setup
+    math.randomseed( os.time() ) --xaos yo!
     love.mouse.setVisible(false)
     PXL.screen.canvas = love.graphics.newCanvas(PXL.screen.x,PXL.screen.y)
     --timers
@@ -140,7 +159,7 @@ function love.load()
         else
             games[k].icon = love.graphics.newImage("images/no_icon.png")
         end
-        games[k].screen = PXL.screen--give the module screen a ref to screen
+        games[k].screen = PXL.screen--give the module screen a ref to screen(which makes no sense with the next line)
         games[k].PXL = PXL
     
     end
@@ -182,7 +201,7 @@ function love.update(dt)
     if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
         buildFX() --the shine libe doesn't update for changing screen sizes itself so we do it here
         PXL.lastres = res
-        print("fx rebuilt"..inspect(res)..inspect(PXL.lastres))
+        print("fx rebuilt"..PXL.inspect(res)..PXL.inspect(PXL.lastres))
     end
     
     if PXL.timers.intro:once() then
