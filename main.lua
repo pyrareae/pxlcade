@@ -43,9 +43,10 @@ end
 PXL.lastres = {0,0}
 PXL.options={--setting here!
     fx = { -- filters
-        crt = true,
+        crt = false,
         grain = false,
-        gpugrain = true
+        gpugrain = true,
+        crtwarp = true
     },
     anim = {
         intro = 500,
@@ -88,19 +89,21 @@ local function buildFX() --setup shader FX
     local separate_chroma = shine.separate_chroma()
 --     local scanlines = shine.scanlines()
     local glow = shine.glowsimple()
---     crt.y = 0.05
---     crt.x = 0.05
     separate_chroma.angle = 0.2
-    separate_chroma.radius = 0
+    separate_chroma.radius = 1
 --     scanlines.pixel_size=PXL.screen:scale()
 --     scanlines.line_height=0.3
 --     scanlines.opacity = 0.2
-    crt._x_distortion, crt._y_distortion = 0.03, 0.0325
+    crt.x, crt.y = 0.03, 0.0325
     glow.min_luma = 0.2
     glow.sigma = 10
     
 --     PXL.post_effect = grain:chain(separate_chroma):chain(crt)
-    PXL.post_effect = separate_chroma:chain(crt):chain(glow)
+    if PXL.options.fx.crtwarp then
+        PXL.post_effect = separate_chroma:chain(crt):chain(glow)
+    else
+        PXL.post_effect = separate_chroma:chain(glow)
+    end
 end
 
 function love.load()
@@ -115,13 +118,9 @@ function love.load()
     PXL.timers.text  = timer:new(PXL.options.anim.text/2):pause()
     
     --build grain FX
-    if PXL.options.fx.gpugrain then
-        PXL.grain = shine.filmgrain()
-        PXL.grain.opacity = 0.3
-        PXL.grain.grainsize = 1
-    else
-        PXL.grain = false
-    end
+    PXL.grain = shine.filmgrain()
+    PXL.grain.opacity = 0.15
+    PXL.grain.grainsize = 1
     
     buildFX()--init other fx
     
@@ -196,11 +195,19 @@ function love.keypressed(key, screencode, isrepeat)
     elseif PXL.state == 'game' and games:active().keypressed then
         games:active():keypressed(key, screencode, isrepeat)
     end
+    if key == '1' then--fx toggling
+        PXL.options.fx.crt = not PXL.options.fx.crt
+    elseif key == '2' then
+        PXL.options.fx.gpugrain = not PXL.options.fx.gpugrain
+    elseif key == '3' then
+        PXL.options.fx.crtwarp = not PXL.options.fx.crtwarp
+        buildFX()
+    end
 end
 function love.update(dt)
     local res = {love.graphics.getHeight(), love.graphics.getWidth()}
     if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
-        buildFX() --the shine libe doesn't update for changing screen sizes itself so we do it here
+        buildFX() --the shine lib doesn't update for changing screen sizes itself so we do it here
         PXL.lastres = res
         print("fx rebuilt"..PXL.inspect(res)..PXL.inspect(PXL.lastres))
     end
@@ -282,7 +289,7 @@ local function draw()
     local old_canvas = love.graphics.getCanvas()--for compatibillity with shine
     PXL.screen.canvas:setFilter('nearest', 'nearest', 0)
     love.graphics.setCanvas(PXL.screen.canvas)
-    love.graphics.setDefaultFilter('nearest', 'nearest', 0)
+--     love.graphics.setDefaultFilter('nearest', 'nearest', 0)
     love.graphics.clear()
     love.graphics.setFont(PXL.font)
     
@@ -328,7 +335,7 @@ local function draw()
     end
     
     --all for the sake of grain...
-    if PXL.grain then
+    if PXL.options.fx.gpugrain then
         PXL.grain:draw(smalldraw)
     else
         smalldraw()

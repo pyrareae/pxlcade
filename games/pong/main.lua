@@ -2,8 +2,7 @@ local M = {}
 M.name = "Pong"
 M.fx = {
     trail = true,
-    sparkle = true,
-    grain = true
+    sparkle = false
 }
 M.player1 = {
     y = 0,
@@ -20,8 +19,8 @@ M.player2 = {
     speed = 75
 }
 M.ball = {
-    x = 0,
-    y = 0,
+    x = 24,
+    y = 18,
     xVel = 0,
     yVel = 0,
     size = 3,
@@ -80,12 +79,13 @@ function M:load()
 --     self.pixelimg = love.graphics.newImage(cwd.."pixelmask.png")
     local spk = love.graphics.newImage(cwd.."spark.png")
     self.trail = love.graphics.newParticleSystem(spk, 60)
-    self.trail:setParticleLifetime(1,2)
+    self.trail:setParticleLifetime(1,3)
     self.trail:setEmissionRate(20)
     self.trail:setSizes(0.3, 1)
     self.trail:setSizeVariation(1)
     self.trail:setLinearAcceleration(-20,-20,20,20)
-    self.trail:setColors(170,50,255,255,255,0,0,180)
+    self.trail:setColors(170,50,255,200, 255,175,0,160, 255,255,255,0)
+    self.trail:setPosition(self.ball.x+self.ball.size/2, self.ball.y+self.ball.size/2)--center it
     self:initgame()
 end
 
@@ -265,6 +265,10 @@ function M:draw()
             love.graphics.setColor(255,255,255,150)
             love.graphics.draw(self.kittyimg, 15,10)
         end
+        if self.fx.trail then 
+            self.trail:setPosition(self.ball.x+self.ball.size/2, self.ball.y+self.ball.size/2)
+            love.graphics.draw(self.trail, 0,0)
+        end
         love.graphics.setColor(self.colors.darkGray)
         love.graphics.printf(string.format("%i-%i", self.score.cpu, self.score.player), 0, 5, self.screen.x, 'center')
         if not self.multiplayer then
@@ -286,37 +290,11 @@ function M:draw()
                 love.graphics.rectangle('fill',x+math.random(-dist-1,dist), y+math.random(-dist-1,dist),1,1)
             end
         end
-        if self.fx.trail then 
-            self.trail:setPosition(self.ball.x+self.ball.size/2, self.ball.y+self.ball.size/2)
-            love.graphics.draw(self.trail, 0,0)
-        end
         --draw paddles
         love.graphics.setColor(self.multiplayer and self.colors.pink or self.colors.white)
         love.graphics.rectangle('line', self.player1.x, self.player1.y, self.player1.thickness, self.player1.len)    speed = 
         love.graphics.setColor(self.multiplayer and self.colors.violet or self.colors.gray)
         love.graphics.rectangle('line', self.player2.x, self.player2.y, self.player2.thickness, self.player2.len)
     end
-    
---     --noise effect
---     if self.fx.grain then
---         for y=0,self.screen.y do
---             for x=0,self.screen.x do
---                 local color = math.random(0,255)
---                 love.graphics.setColor(color,color,color,25)
---                 love.graphics.rectangle('fill',x+self.screen:offset(),y,1,1)
---             end
---         end
---     end
---     love.graphics.setColor(255,255,255,255)
-    
---     love.graphics.setCanvas()
--- --     love.graphics.setBlendMode("alpha", "premultiplied")
---     love.graphics.setColor(255,255,255,255)
---     love.graphics.draw(self.PXL.screen.canvas, self.screen:offset(),0,0, self.screen:scale(), self.screen:scale())
---     if self.fx.crt then
---         love.graphics.setBlendMode("multiply")
---         love.graphics.draw(self.pixelimg,self.screen:offset(),0,0,self.screen:scale()/10,self.screen:scale()/10)
---         love.graphics.setBlendMode("alpha")
---     end
 end
 return M
