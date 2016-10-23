@@ -1,6 +1,6 @@
 -- class.lua
 -- Compatible with Lua 5.1 (not 5.0).
-function class(base, init)
+local function class(base, init)
    local c = {}    -- a new class instance
    if not init and type(base) == 'function' then
       init = base
@@ -45,3 +45,4 @@ function class(base, init)
    setmetatable(c, mt)
    return c
 end
+return class

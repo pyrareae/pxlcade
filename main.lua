@@ -1,9 +1,13 @@
 local timer = require("timer")
 local shine = require('lib.shine')
+local PXL = {}
 local games = {}
 -- games['pong'] = require("games.pong.main")
 -- games['pong'].cwd = 'games/pong/'
-games.selected = 1
+games.selected = 3
+PXL.state = 'game'
+-- games.selected = 1
+-- PXL.state = 'menu'
 function games:active()
     return self[self.selected]
 end
@@ -19,7 +23,6 @@ end
 function games:prev()
     return self[(self.selected - 1) > 0 and (self.selected - 1) or #self] --rollback decrement
 end
-local PXL = {}
 PXL.options={--setting here!
     fx = { --cpu filters
         crt = true,
@@ -48,7 +51,6 @@ PXL.screen = {
 function GotoMenu() --return to main menu, call from subgames
     PXL.state="menu"
 end
-PXL.state = 'menu'
 PXL.images = {}
 PXL.timers = {}
 PXL.states = { --substates
