@@ -1,11 +1,20 @@
 local class = require('lib.class')
+local Timer = require('timer')
 local M = {
     name="Snake",
 }
+-- local function absMax(a, b) 
+--     local max, min = math.max(a,b), math.min(a,b)
+--     if math.abs(max) > math.abs(min) then
+--         return max 
+--     else
+--         return min
+--     end
+-- end
 
-Snake = class()
+local Snake = class()
 function Snake:init(args)
-    local args = args or {} --lua weirdness. (make calling without args work with named arg setup)
+    local args = args or {} --(make calling without args work)
     self.map = M.map
     self.length = args.length or 5
     self.vel = args.vel or {x=0,y=0}
@@ -14,7 +23,7 @@ function Snake:init(args)
     self.headColor = args.headColor or M.PXL.colors.orange[3]
     self.speed = args.speed or 6
     self.pos = args.pos
-    if not pos then
+    if not self.pos then
         self.pos = {x=math.random(1, self.map.x),y= math.random(1,self.map.y)}
     end
 --     for i=1, self.length do --init body at pos (down to up)
@@ -32,9 +41,10 @@ function Snake:tick(dt) --update function
     end
     local head = self.body[1]
     --check for pellet
-    if M.map[head.x][head.y] == 1 then
+    if self.map[head.x] and self.map[head.x][head.y] == 1 then --TODO add rollover handler
         self.length = self.length+1 --Yum!
-        M.map[head.x][head.y] = 0
+        self.map[head.x][head.y] = 0
+        return true
     end
 end
 
@@ -64,30 +74,90 @@ function Snake:draw()
     end
 end
 
-Player = class(Snake) --player snake
+local Player = class(Snake) --player snake
 function Player:tick(dt)
     --control handling
     if love.keyboard.isDown('up') then
         self.vel = {x=0, y=-1}
+        if self._ft then Snake.tick(self, .5/self.speed) end self._ft = nil --force inc by one if this is 1st key read
     elseif love.keyboard.isDown('down') then
         self.vel = {x=0, y=1}
+        if self._ft then Snake.tick(self, .5/self.speed) end self._ft = nil
     elseif love.keyboard.isDown('left') then
         self.vel = {x=-1, y=0}
+        if self._ft then Snake.tick(self, .5/self.speed) end self._ft = nil
     elseif love.keyboard.isDown('right') then
         self.vel = {x=1, y=0}
+        if self._ft then Snake.tick(self, .5/self.speed) end self._ft = nil
+    else 
+         self._ft = true
     end
     Snake.tick(self, dt)
     --camera handling
-    M.map.offset = {
-        x = -M.PXL.round(self.pos.x - M.map.x/2),
-        y = -M.PXL.round(self.pos.y - M.map.y/2) 
+    self.map.offset = {
+        x = -M.PXL.round(self.pos.x - self.map.x/2),
+        y = -M.PXL.round(self.pos.y - self.map.y/2) 
     }
+end
+
+local AI = class(Snake)--the cake is a lie!
+function AI:init(...)
+    Snake.init(self, ...)
+    self:target() --init target
+    self.timer = Timer:new(200)
+end
+function AI:target()
+    --search for nearest pellet
+    local function search(x,y,rad)
+        local co = {
+            x=M.PXL.round(x-rad),
+            y=M.PXL.round(y-rad),
+            x2=M.PXL.round(x+rad),
+            y2=M.PXL.round(y+rad)
+        }
+        for ix=co.x, co.x2 do--check top and bottom line
+            if self.map[ix] and self.map[ix][co.y]==1 then
+                return {x=ix, y=co.y}
+            elseif self.map[ix] and self.map[ix][co.y2]==1 then
+                return {x=ix, y=co.y2}
+            end
+        end
+        for iy = co.y, co.y2 do --check right and left line
+            if self.map[co.x] and self.map[co.x][iy]==1 then
+                return {x=co.x, y=iy}
+            elseif self.map[co.x2] and self.map[co.x2][iy]==1 then
+                return {x=co.x2, y=iy}
+            end
+        end
+        if rad > self.map.x then return false end --search limit
+        return search(x,y,rad+1)--search next ring
+    end
+    self._target = search(self.pos.x, self.pos.y, 1)
+    if not self._target then --stop if all pellets are gone
+        self.vel = {x=0,y=0}
+        return 
+    end
+    --calc vel to reach target
+    local dir = {x=self._target.x - self.pos.x, y=self._target.y - self.pos.y}
+    local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
+    self.vel.x = dir.x/div
+    self.vel.y = dir.y/div
+end
+function AI:tick(dt)
+    --retarget every x ms
+    if self.timer:every() then
+        self:target()
+    end
+    Snake.tick(self, dt)
+--     if self._target and self.map[self._target.x][self._target.y] ~= 1 then 
+--         self:target()--retarget if pellet is gone
+--     end
 end
 
 function M:load()
     M.colormap = {
         {0,0,0},
-        M.PXL.colors.red[3]
+        M.PXL.colors.purple[3]
     }
     M.map = {offset={x=0,y=0}}
     M.map.x, M.map.y = M.screen.x, M.screen.y --double screen size
@@ -99,12 +169,14 @@ function M:load()
         end
     end
     --init player..
-    M.player = Player()
+    M.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
+    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=4})--init ai
 end
 
 function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     M.player:tick(dt)
+    M.ai:tick(dt)
 end
 function M:draw()
     love.graphics.push()
@@ -118,6 +190,9 @@ function M:draw()
         end
     end
     M.player:draw()
+    M.ai:draw()
+    --show ai target
+    love.graphics.setColor({255,0,0,127}); if M.ai._target.x then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end
     love.graphics.pop()
 end
 return M
