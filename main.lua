@@ -23,6 +23,7 @@ function PXL.round(num, idp)
 end
 
 games.selected = 1
+-- PXL.state = 'intro'
 PXL.state = 'menu'
 function games:active()
     return self[self.selected]

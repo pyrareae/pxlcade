@@ -47,7 +47,7 @@ function Snake:rebuildBody()
     self.body = new
 end
 
-function Snake:draw(offset)
+function Snake:draw()
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
        for i, v in ipairs(color) do
@@ -60,7 +60,7 @@ function Snake:draw(offset)
         local seg = self.body[i]
         love.graphics.setColor(fadecolor(self.color, i))
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
-        love.graphics.points(seg.x+0.5+offset.x, seg.y+0.5+offset.y)
+        love.graphics.points(seg.x+0.5, seg.y+0.5)
     end
 end
 
@@ -77,6 +77,11 @@ function Player:tick(dt)
         self.vel = {x=1, y=0}
     end
     Snake.tick(self, dt)
+    --camera handling
+    M.map.offset = {
+        x = -M.PXL.round(self.pos.x - M.map.x/2),
+        y = -M.PXL.round(self.pos.y - M.map.y/2) 
+    }
 end
 
 function M:load()
@@ -84,10 +89,8 @@ function M:load()
         {0,0,0},
         M.PXL.colors.red[3]
     }
-    M.map = {offset={}}
---     M.map.x, M.map.y = 100, 80
-    M.map.x, M.map.y = M.screen.x, M.screen.y --just until camera in written
-    M.map.offset.x, M.map.offset.y = 0,0
+    M.map = {offset={x=0,y=0}}
+    M.map.x, M.map.y = M.screen.x, M.screen.y --double screen size
     --gen empty map
     for x=1, M.map.x do
         M.map[x] = {}
@@ -100,17 +103,21 @@ function M:load()
 end
 
 function M:update(dt)
+    if love.keyboard.isDown('q') then GotoMenu() end
     M.player:tick(dt)
 end
 function M:draw()
-    for x=1+M.map.offset.x, M.screen.x do--draw visible map accounting for offset
-        for y=1+M.map.offset.y, M.screen.y do
-            if M.map[x][y] then
+    love.graphics.push()
+    love.graphics.translate(self.map.offset.x, self.map.offset.y)
+    for x=1, M.screen.x do--draw map accounting
+        for y=1, M.screen.y do
+            if M.map[x] and M.map[x][y] then
                 love.graphics.setColor(M.colormap[1+M.map[x][y]])
                 love.graphics.points(0.5+x, 0.5+y)
             end
         end
     end
-    M.player:draw(M.map.offset)
+    M.player:draw()
+    love.graphics.pop()
 end
 return M
