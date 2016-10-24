@@ -13,10 +13,10 @@ local M = {
 -- end
 
 local Snake = class()
-Snake.instances = {}
+SnakeInstances = {}
 function Snake:init(args)
     local args = args or {} --(make calling without args work)
-    self.instances[#self.instances+1] = self--register self
+    SnakeInstances[#SnakeInstances+1] = self--register self
     self.map = M.map
     self.length = args.length or 5
     self.vel = args.vel or {x=0,y=0}
@@ -48,7 +48,7 @@ function Snake:tick(dt) --update function
         self.length = self.length+1 --Yum!
         self.score = self.score+1
         self.map[head.x][head.y] = 0
-        return true
+        self.speed = self.speed+0.01 --make each pellet boost speed 
     end
 end
 
@@ -111,7 +111,7 @@ function Player:tick(dt)
     }
     --check for other snake
     local head = self.body[1]
-    for i, s in ipairs(self.instances) do
+    for i, s in ipairs(SnakeInstances) do
         if s ~= self then --ignore self colision
             for _, seg in ipairs(s.body) do --loop over body and check for collision
                 if head.x == seg.x and head.y == seg.y then
@@ -174,11 +174,8 @@ function AI:target()
 --     print(M.PXL.inspect(self.vel))
 end
 function AI:tick(dt)
---     if self.timer:every() then
---         self:target()
---     end
 --square movement algo
---     local head = M.PXL.shallowcopy(self.body[1])
+    local head = M.PXL.shallowcopy(self.body[1])
     Snake.tick(self, dt)
     if head ~= self.body[1] then --if moved
 --         print(M.PXL.inspect({self._target, self.body[1]}))
@@ -194,10 +191,11 @@ function AI:tick(dt)
             end
         end
     end
+    
 end
 
 function M:load()
-    Snake.instances = {} -- clear old snakes
+    SnakeInstances = {} -- clear old snakes
     M.colormap = {
         {0,0,0},
         M.PXL.colors.purple[3]
@@ -228,7 +226,7 @@ end
 function M:draw()
     --draw score
     love.graphics.setColor(M.PXL.colors.gray[3])
-    M.PXL.printCenter(tostring(M.player.score)..":vs:"..tostring(M.ai.score),1)
+    M.PXL.printCenter(tostring(M.player.score).."vs"..tostring(M.ai.score),1)
     love.graphics.push()
     love.graphics.translate(self.map.offset.x, self.map.offset.y)
     for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
@@ -239,8 +237,9 @@ function M:draw()
             end
         end
     end
-    M.player:draw()
-    M.ai:draw()
+    for _, snake in ipairs(SnakeInstances) do
+        snake:draw()
+    end
 --     love.graphics.setColor({255,0,0,127}); if M.ai._target then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end --show ai target
     love.graphics.pop()
     if self.state == 'dead' then
