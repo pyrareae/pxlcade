@@ -127,7 +127,7 @@ local AI = class(Snake)--the cake is a lie!
 function AI:init(...)
     Snake.init(self, ...)
     self:target() --init target
-    self.timer = Timer:new(200)
+--     self.timer = Timer:new(200)
 end
 function AI:target()
     --search for nearest pellet
@@ -152,36 +152,60 @@ function AI:target()
                 return {x=co.x2, y=iy}
             end
         end
-        if rad > self.map.x then return false end --search limit
+        if rad > self.map.x then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,rad+1)--search next ring
     end
     self._target = search(self.pos.x, self.pos.y, 1)
-    if not self._target then --stop if all pellets are gone
+    if self._target.fail then --stop if all pellets are gone
         self.vel = {x=0,y=0}
         return 
     end
     --calc vel to reach target
     local dir = {x=self._target.x - self.pos.x, y=self._target.y - self.pos.y}
     local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
-    self.vel.x = M.PXL.round(dir.x/div)
-    self.vel.y = M.PXL.round(dir.y/div)
+    self.vel.x = dir.x/div
+    self.vel.y = dir.y/div
+    --square movement
+    if math.abs(self.vel.x) == 1 then
+        self.vel.y = 0
+    else
+        self.vel.x = 0
+    end
+--     print(M.PXL.inspect(self.vel))
 end
 function AI:tick(dt)
-    --retarget every x ms
-    if self.timer:every() then
-        self:target()
-    end
+--     if self.timer:every() then
+--         self:target()
+--     end
+--square movement algo
+--     local head = M.PXL.shallowcopy(self.body[1])
     Snake.tick(self, dt)
+    if head ~= self.body[1] then --if moved
+--         print(M.PXL.inspect({self._target, self.body[1]}))
+        if math.abs(self.vel.x) == 1 then
+            if self._target.x == self.body[1].x then
+                self:target() --lazyness...
+                print('y align')
+            end
+        else
+            if self._target.y == self.body[1].y then
+                self:target()
+                print('x align')
+            end
+        end
+    end
 end
 
 function M:load()
+    Snake.instances = {} -- clear old snakes
     M.colormap = {
         {0,0,0},
         M.PXL.colors.purple[3]
     }
     M.state = "run"
     M.map = {offset={x=0,y=0}}
-    M.map.x, M.map.y = M.screen.x*1.5, M.screen.y*1.5 --double screen size
+--     M.map.x, M.map.y = M.screen.x*1.5, M.screen.y*1.5
+    M.map.x, M.map.y = M.screen.x*1, M.screen.y*1
     --gen empty map
     for x=1, M.map.x do
         M.map[x] = {}
@@ -191,7 +215,7 @@ function M:load()
     end
     --init player..
     M.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
-    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=4})--init ai
+    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=5})--init ai
 end
 
 function M:update(dt)
@@ -217,8 +241,7 @@ function M:draw()
     end
     M.player:draw()
     M.ai:draw()
-    --show ai target
-    love.graphics.setColor({255,0,0,127}); if M.ai._target then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end
+--     love.graphics.setColor({255,0,0,127}); if M.ai._target then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end --show ai target
     love.graphics.pop()
     if self.state == 'dead' then
         love.graphics.setColor({255,0,0,100})
