@@ -131,7 +131,7 @@ function love.load()
     PXL.images.crt = love.graphics.newImage("images/pixelmask.png")
     PXL.font = love.graphics.newFont("fonts/AerxFont.ttf", 16)
     
-     --create color palette
+     --create color palette (why use an image? because I can even if it makes everything hadrer!)
     local palette = love.image.newImageData( 'images/palette.png' )
     PXL.colors = {{},{},{},{},{},{},{}}
     for x = 1, palette:getWidth() do --read first line horizontally

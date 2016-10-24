@@ -60,8 +60,9 @@ end
 function Snake:draw()
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
+       local factor = math.exp(1)^(-x/(50+self.length/2))
        for i, v in ipairs(color) do
-           c[i] = v*math.exp(1)^(-x/85)
+           c[i] = (v*factor+255*(1-factor))
        end
        return c
     end
@@ -91,6 +92,10 @@ function Player:tick(dt)
         if self._ft then Snake.tick(self, .5/self.speed) end self._ft = nil
     else 
          self._ft = true
+    end
+    --speed boost cheat
+    if love.keyboard.isDown(']') then
+        self.speed = 16
     end
     Snake.tick(self, dt)
     --camera handling
@@ -142,8 +147,8 @@ function AI:target()
     --calc vel to reach target
     local dir = {x=self._target.x - self.pos.x, y=self._target.y - self.pos.y}
     local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
-    self.vel.x = dir.x/div
-    self.vel.y = dir.y/div
+    self.vel.x = M.PXL.round(dir.x/div)
+    self.vel.y = M.PXL.round(dir.y/div)
 end
 function AI:tick(dt)
     --retarget every x ms
