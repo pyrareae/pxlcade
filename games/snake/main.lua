@@ -26,6 +26,8 @@ function Snake:init(args)
     self.speed = args.speed or 6
     self.pos = args.pos
     self.score = 0
+    self.canDie = args.canDie == nil and true or args.canDie 
+    self.dead = false
     if not self.pos then
         self.pos = {x=math.random(1, self.map.x),y= math.random(1,self.map.y)}
     end
@@ -36,6 +38,7 @@ function Snake:init(args)
 end
 
 function Snake:tick(dt) --update function
+    if self.dead then return end --abort if dead
     local oldpos = shallowcopy(self.pos)
     --increment pos then compare it against old, both rounded, then handle rebuilding body.
     self.pos.x, self.pos.y = self.pos.x + self.vel.x *dt*self.speed, self.pos.y + self.vel.y *dt*self.speed
@@ -47,8 +50,22 @@ function Snake:tick(dt) --update function
     if self.map[head.x] and self.map[head.x][head.y] == 1 then --TODO add rollover handler
         self.length = self.length+1 --Yum!
         self.score = self.score+1
+        self.map.pellets = self.map.pellets -1
         self.map[head.x][head.y] = 0
         self.speed = self.speed+0.01 --make each pellet boost speed 
+    end
+    --check for other snake
+    local head = self.body[1]
+    if self.canDie then
+        for i, s in ipairs(SnakeInstances) do
+            if s ~= self then --ignore self colision
+                for _, seg in ipairs(s.body) do --loop over body and check for collision
+                    if head.x == seg.x and head.y == seg.y then
+                        self.dead = true
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -75,6 +92,7 @@ function Snake:draw()
         local seg = self.body[i]
         love.graphics.setColor(fadecolor(self.color, i))
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
+        if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
         love.graphics.points(seg.x+0.5, seg.y+0.5)
     end
 end
@@ -102,6 +120,7 @@ function Player:tick(dt)
         self.speed = 16
     end
     Snake.tick(self, dt)
+    if self.dead then M.state = 'dead' end
     --camera handling
     self.map.offset = {
 --         x = -M.PXL.round(self.pos.x - self.map.x/2),
@@ -109,18 +128,6 @@ function Player:tick(dt)
         x = -M.PXL.round(self.pos.x - M.screen.x/2),
         y = -M.PXL.round(self.pos.y - M.screen.y/2) 
     }
-    --check for other snake
-    local head = self.body[1]
-    for i, s in ipairs(SnakeInstances) do
-        if s ~= self then --ignore self colision
-            for _, seg in ipairs(s.body) do --loop over body and check for collision
-                if head.x == seg.x and head.y == seg.y then
-                    M.state = "dead"
-                    print('died')
-                end
-            end
-        end
-    end
 end
 
 local AI = class(Snake)--the cake is a lie!
@@ -152,7 +159,7 @@ function AI:target()
                 return {x=co.x2, y=iy}
             end
         end
-        if rad > self.map.x then return {x=0,y=0,fail=true} end --search limit
+        if rad > math.max(self.map.x, self.map.y) then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,rad+1)--search next ring
     end
     self._target = search(self.pos.x, self.pos.y, 1)
@@ -171,23 +178,19 @@ function AI:target()
     else
         self.vel.x = 0
     end
---     print(M.PXL.inspect(self.vel))
 end
 function AI:tick(dt)
 --square movement algo
     local head = M.PXL.shallowcopy(self.body[1])
     Snake.tick(self, dt)
     if head ~= self.body[1] then --if moved
---         print(M.PXL.inspect({self._target, self.body[1]}))
         if math.abs(self.vel.x) == 1 then
             if self._target.x == self.body[1].x then
                 self:target() --lazyness...
-                print('y align')
             end
         else
             if self._target.y == self.body[1].y then
                 self:target()
-                print('x align')
             end
         end
     end
@@ -202,37 +205,49 @@ function M:load()
     }
     M.state = "run"
     M.map = {offset={x=0,y=0}}
---     M.map.x, M.map.y = M.screen.x*1.5, M.screen.y*1.5
-    M.map.x, M.map.y = M.screen.x*1, M.screen.y*1
+    M.map.x, M.map.y = M.PXL.round(M.screen.x*math.random(0.5,2)), M.PXL.round(M.screen.y*math.random(0.5,2))
+    M.map.pellets = 0
     --gen empty map
     for x=1, M.map.x do
         M.map[x] = {}
         for y=1, M.map.y do
-            M.map[x][y] = math.random() > 0.95 and 1 or 0 --0=empty, 1=pellet
+            local cell = math.random() > 0.95 and 1 or 0 --0=empty, 1=pellet
+            M.map[x][y] = cell --0=empty, 1=pellet
+            if cell == 1 then
+                M.map.pellets = M.map.pellets+1
+            end
         end
     end
     --init player..
     M.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
-    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=5})--init ai
+    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=5, canDie = false})--init ai
+    print(M.ai.canDie)
 end
 
 function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
-        M.player:tick(dt)
+        self.player:tick(dt)
     end
-    M.ai:tick(dt)
+    if self.state ~= 'done' then
+        self.ai:tick(dt)
+    end
+    if self.map.pellets == 0 then
+        self.state = 'done'
+    end
 end
 function M:draw()
     --draw score
-    love.graphics.setColor(M.PXL.colors.gray[3])
-    M.PXL.printCenter(tostring(M.player.score).."vs"..tostring(M.ai.score),1)
+    love.graphics.setColor(self.PXL.colors.gray[3])
+    self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(self.ai.score),1)
+    love.graphics.setColor(self.PXL.colors.gray[2])
+    self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
     love.graphics.push()
     love.graphics.translate(self.map.offset.x, self.map.offset.y)
     for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
         for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
-            if M.map[x] and M.map[x][y] and M.map[x][y] ~=0 then
-                love.graphics.setColor(M.colormap[1+M.map[x][y]])
+            if self.map[x] and self.map[x][y] and self.map[x][y] ~=0 then
+                love.graphics.setColor(self.colormap[1+self.map[x][y]])
                 love.graphics.points(0.5+x, 0.5+y)
             end
         end
@@ -240,13 +255,22 @@ function M:draw()
     for _, snake in ipairs(SnakeInstances) do
         snake:draw()
     end
---     love.graphics.setColor({255,0,0,127}); if M.ai._target then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end --show ai target
+--     love.graphics.setColor({255,0,0,127}); if self.ai._target then love.graphics.points(self.ai._target.x+.5, self.ai._target.y+.5) end --show ai target
     love.graphics.pop()
     if self.state == 'dead' then
         love.graphics.setColor({255,0,0,100})
         love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
         love.graphics.setColor({255,255,255,255})
-        M.PXL.printCenter("game over")
+        self.PXL.printCenter("You Died")
+    elseif self.state == 'done' then
+        love.graphics.setColor({255,255,255,70})
+        love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
+        love.graphics.setColor({255,255,255,255})
+        if self.player.score > self.ai.score then
+            self.PXL.printCenter("You Win!")
+        else
+            self.PXL.printCenter("CPU Wins")
+        end
     end
 end
 return M
