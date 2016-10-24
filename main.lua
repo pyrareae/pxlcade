@@ -21,6 +21,15 @@ function PXL.round(num, idp)
   local mult = 10^(idp or 0)
   return math.floor(num * mult + 0.5) / mult
 end
+function PXL.printCenter(text, row, offset)
+    if offset then
+        love.graphics.printf(text, 1, offset, PXL.screen.x, 'center')
+    elseif row then
+        love.graphics.printf(string.rep('\n', row-1).. text, 1, 1, PXL.screen.x, 'center')
+    else--centered y
+        love.graphics.printf(text, 1, PXL.screen.y/2-PXL.font:getHeight()/2, PXL.screen.x, 'center')
+    end
+end
 
 games.selected = 1
 -- PXL.state = 'intro'
@@ -130,6 +139,7 @@ function love.load()
     PXL.images.deco1 = love.graphics.newImage("images/deco1.png")
     PXL.images.crt = love.graphics.newImage("images/pixelmask.png")
     PXL.font = love.graphics.newFont("fonts/AerxFont.ttf", 16)
+    PXL.font:setLineHeight(0.625) --8px high + 1px margin top/bottom
     
      --create color palette (why use an image? because I can even if it makes everything hadrer!)
     local palette = love.image.newImageData( 'images/palette.png' )

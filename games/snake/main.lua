@@ -13,8 +13,10 @@ local M = {
 -- end
 
 local Snake = class()
+Snake.instances = {}
 function Snake:init(args)
     local args = args or {} --(make calling without args work)
+    self.instances[#self.instances+1] = self--register self
     self.map = M.map
     self.length = args.length or 5
     self.vel = args.vel or {x=0,y=0}
@@ -23,6 +25,7 @@ function Snake:init(args)
     self.headColor = args.headColor or M.PXL.colors.orange[3]
     self.speed = args.speed or 6
     self.pos = args.pos
+    self.score = 0
     if not self.pos then
         self.pos = {x=math.random(1, self.map.x),y= math.random(1,self.map.y)}
     end
@@ -43,6 +46,7 @@ function Snake:tick(dt) --update function
     --check for pellet
     if self.map[head.x] and self.map[head.x][head.y] == 1 then --TODO add rollover handler
         self.length = self.length+1 --Yum!
+        self.score = self.score+1
         self.map[head.x][head.y] = 0
         return true
     end
@@ -60,9 +64,9 @@ end
 function Snake:draw()
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
-       local factor = math.exp(1)^(-x/(50+self.length/2))
+       local factor = math.exp(1)^(-x/(50+self.length/2)) --change gradient based on len
        for i, v in ipairs(color) do
-           c[i] = (v*factor+255*(1-factor))
+           c[i] = (v*factor+255*(1-factor)) -- fade to white
        end
        return c
     end
@@ -105,6 +109,18 @@ function Player:tick(dt)
         x = -M.PXL.round(self.pos.x - M.screen.x/2),
         y = -M.PXL.round(self.pos.y - M.screen.y/2) 
     }
+    --check for other snake
+    local head = self.body[1]
+    for i, s in ipairs(self.instances) do
+        if s ~= self then --ignore self colision
+            for _, seg in ipairs(s.body) do --loop over body and check for collision
+                if head.x == seg.x and head.y == seg.y then
+                    M.state = "dead"
+                    print('died')
+                end
+            end
+        end
+    end
 end
 
 local AI = class(Snake)--the cake is a lie!
@@ -156,9 +172,6 @@ function AI:tick(dt)
         self:target()
     end
     Snake.tick(self, dt)
---     if self._target and self.map[self._target.x][self._target.y] ~= 1 then 
---         self:target()--retarget if pellet is gone
---     end
 end
 
 function M:load()
@@ -166,6 +179,7 @@ function M:load()
         {0,0,0},
         M.PXL.colors.purple[3]
     }
+    M.state = "run"
     M.map = {offset={x=0,y=0}}
     M.map.x, M.map.y = M.screen.x*1.5, M.screen.y*1.5 --double screen size
     --gen empty map
@@ -182,15 +196,20 @@ end
 
 function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
-    M.player:tick(dt)
+    if self.state == 'run' then
+        M.player:tick(dt)
+    end
     M.ai:tick(dt)
 end
 function M:draw()
+    --draw score
+    love.graphics.setColor(M.PXL.colors.gray[3])
+    M.PXL.printCenter(tostring(M.player.score)..":vs:"..tostring(M.ai.score),1)
     love.graphics.push()
     love.graphics.translate(self.map.offset.x, self.map.offset.y)
     for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
         for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
-            if M.map[x] and M.map[x][y] then
+            if M.map[x] and M.map[x][y] and M.map[x][y] ~=0 then
                 love.graphics.setColor(M.colormap[1+M.map[x][y]])
                 love.graphics.points(0.5+x, 0.5+y)
             end
@@ -199,7 +218,13 @@ function M:draw()
     M.player:draw()
     M.ai:draw()
     --show ai target
-    love.graphics.setColor({255,0,0,127}); if M.ai._target.x then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end
+    love.graphics.setColor({255,0,0,127}); if M.ai._target then love.graphics.points(M.ai._target.x+.5, M.ai._target.y+.5) end
     love.graphics.pop()
+    if self.state == 'dead' then
+        love.graphics.setColor({255,0,0,100})
+        love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
+        love.graphics.setColor({255,255,255,255})
+        M.PXL.printCenter("game over")
+    end
 end
 return M
