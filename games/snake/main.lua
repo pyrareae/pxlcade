@@ -95,8 +95,10 @@ function Player:tick(dt)
     Snake.tick(self, dt)
     --camera handling
     self.map.offset = {
-        x = -M.PXL.round(self.pos.x - self.map.x/2),
-        y = -M.PXL.round(self.pos.y - self.map.y/2) 
+--         x = -M.PXL.round(self.pos.x - self.map.x/2),
+--         y = -M.PXL.round(self.pos.y - self.map.y/2) 
+        x = -M.PXL.round(self.pos.x - M.screen.x/2),
+        y = -M.PXL.round(self.pos.y - M.screen.y/2) 
     }
 end
 
@@ -160,7 +162,7 @@ function M:load()
         M.PXL.colors.purple[3]
     }
     M.map = {offset={x=0,y=0}}
-    M.map.x, M.map.y = M.screen.x, M.screen.y --double screen size
+    M.map.x, M.map.y = M.screen.x*1.5, M.screen.y*1.5 --double screen size
     --gen empty map
     for x=1, M.map.x do
         M.map[x] = {}
@@ -181,8 +183,8 @@ end
 function M:draw()
     love.graphics.push()
     love.graphics.translate(self.map.offset.x, self.map.offset.y)
-    for x=1, M.screen.x do--draw map accounting
-        for y=1, M.screen.y do
+    for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
+        for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
             if M.map[x] and M.map[x][y] then
                 love.graphics.setColor(M.colormap[1+M.map[x][y]])
                 love.graphics.points(0.5+x, 0.5+y)

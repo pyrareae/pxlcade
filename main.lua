@@ -333,8 +333,7 @@ local function draw()
             end
         end
     end
-    
-    --all for the sake of grain...
+
     if PXL.options.fx.gpugrain then
         PXL.grain:draw(smalldraw)
     else
@@ -355,4 +354,5 @@ end
 -- love.draw = draw
 function love.draw()
     PXL.post_effect:draw(draw)
+    love.graphics.print("FPS: "..tostring(love.timer.getFPS()), 10, 10)
 end
