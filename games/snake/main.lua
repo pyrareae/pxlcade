@@ -26,19 +26,19 @@ end
 
 local Snake = class()
 SnakeInstances = {}
-function Snake:init(args)
-    local args = args or {} --(make calling without args work)
+function Snake:init(opt)
+--     local args = args or {} --(make calling without args work)
     SnakeInstances[#SnakeInstances+1] = self--register self
     self.map = M.map
-    self.length = args.length or 5
-    self.vel = args.vel or {x=0,y=0}
+    self.length = opt.length or 5
+    self.vel = opt.vel or {x=0,y=0}
     self.body = {}--NOTE keep body vals whole numbers
-    self.color = args.color or M.PXL.colors.blue[2]
-    self.headColor = args.headColor or M.PXL.colors.orange[3]
-    self.speed = args.speed or 6
-    self.pos = args.pos
+    self.color = opt.color or M.PXL.colors.blue[2]
+    self.headColor = opt.headColor or M.PXL.colors.orange[3]
+    self.speed = opt.speed or 6
+    self.pos = opt.pos
     self.score = 0
-    self.canDie = args.canDie == nil and true or args.canDie 
+    self.canDie = opt.canDie == nil and true or opt.canDie 
     self.dead = false
     if not self.pos then
         self.pos = {x=math.random(1, self.map.x),y= math.random(1,self.map.y)}
@@ -143,12 +143,14 @@ function Player:tick(dt)
 end
 
 local AI = class(Snake)--the cake is a lie!
-function AI:init(...)
-    Snake.init(self, ...)
+function AI:init(opt)
+    Snake.init(self, opt)
     self:target() --init target
     self._target, self._avoid = {x=self.pos.x,y=self.pos.y}, {x=0,y=0}
-    self.avtimer = Timer:new(350)
-    self.circledebug = {}--REMOVE
+    self.avtimer = Timer:new(opt.avoidtime or 500)
+    self.circledebug = {}
+    self.notrunning  = true
+    self.avoidRad = opt.avoidrad or 10
 end
 function AI:calcSqVel(dir) -- calculate new velocity from unbound 'dir' and snap it to vertical or horizontal
     local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
@@ -205,7 +207,7 @@ function AI:avoid()
         end
     end
     blacklist = M.player.body--HACK
-    self._avoid = self:circlefind(blacklist) --check for anything nearby
+    self._avoid = self:circlefind(blacklist, self.avoidRad) --check for anything nearby
     if not self._avoid.fail then --found something
         local dir = {x=-(self._avoid.x - self.pos.x), y=-(self._avoid.y - self.pos.y)}
         self:calcSqVel(dir)
@@ -259,15 +261,10 @@ function AI:tick(dt)
             end
         end
     end
-    if self.avtimer:every() then --know when to flee and when to stop fleeing
+    if self.avtimer:every() then
         self:avoid()
         if self._avoid.fail then
-            if not self.notrunning then
-                self:target()
-            end
-            self.notrunning = true
-        else
-            self.notrunning = nil
+            self:target()
         end
     end
     
@@ -290,6 +287,7 @@ function M:mapgen(x,y,rate)
 end
 function M:gameinit() --partial game state init
     local mapsize = self.menu.find("Map", true)
+    local avoidrad = self.menu.find("AIavoid", true)
     self:mapgen(mapsize[2], mapsize[3]) --regen mapgen
     
     local aispeed = self.menu.find("AI sp.", true)
@@ -297,7 +295,7 @@ function M:gameinit() --partial game state init
     SnakeInstances = {} -- clear old snakes
     self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
     self.player.speed = playerspeed--HACK
-    self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = false})--init ai
+    self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=1000, avoidrad=avoidrad})--init ai
 end
 function M:load() -- full game state init
     self.colormap = {
@@ -309,7 +307,8 @@ function M:load() -- full game state init
         {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
         {name = 'AI sp.', range={1, 20}, selected = 4},
         {name = 'P sp.', range={1,20}, selected = 8},
-        {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=1}
+        {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
+        {name = 'AIavoid', range={1, 20}, selected = 5}
     }
     function self.menu.find(name, getval) --return item with maatching name
         for _, v in ipairs(self.menu) do
@@ -330,6 +329,7 @@ function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
         self.player:tick(dt)
+        if self.ai.dead then self.state = 'done' end
     end
     if self.state ~= 'done' then
         self.ai:tick(dt)
@@ -409,7 +409,7 @@ function M:draw()
         love.graphics.setColor({255,255,255,70})
         love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
         love.graphics.setColor({255,255,255,255})
-        if self.player.score > self.ai.score then
+        if self.player.score > self.ai.score or self.ai.dead then
             self.PXL.printCenter("You Win!")
         else
             self.PXL.printCenter("CPU Wins")
