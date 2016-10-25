@@ -22,12 +22,14 @@ function PXL.round(num, idp)
   return math.floor(num * mult + 0.5) / mult
 end
 function PXL.printCenter(text, row, offset)
+    local height = 8 --GAH 'magic numbers'!
     if offset then
         love.graphics.printf(text, 1, offset, PXL.screen.x, 'center')
     elseif row then
-        love.graphics.printf(string.rep('\n', row-1).. text, 1, 1, PXL.screen.x, 'center')
+        local row = row -1
+        love.graphics.printf(text, 1, 1+height*row, PXL.screen.x, 'center')
     else--centered y
-        love.graphics.printf(text, 1, PXL.screen.y/2-PXL.font:getHeight()/2, PXL.screen.x, 'center')
+        love.graphics.printf(text, 1, PXL.screen.y/2-height/2, PXL.screen.x, 'center')
     end
 end
 

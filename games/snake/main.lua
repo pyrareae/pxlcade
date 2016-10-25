@@ -12,6 +12,18 @@ local M = {
 --     end
 -- end
 
+local function roll(val, inc, ceil, floor)
+    local floor = floor or 0
+    local val = val + inc
+    if val > ceil then
+        return floor-1+ (val - ceil)
+    elseif val < floor then
+        return ceil+1 - (floor - val)
+    else
+        return val
+    end
+end
+
 local Snake = class()
 SnakeInstances = {}
 function Snake:init(args)
@@ -196,32 +208,58 @@ function AI:tick(dt)
     end
     
 end
-
-function M:load()
-    SnakeInstances = {} -- clear old snakes
-    M.colormap = {
-        {0,0,0},
-        M.PXL.colors.purple[3]
-    }
-    M.state = "run"
-    M.map = {offset={x=0,y=0}}
-    M.map.x, M.map.y = M.PXL.round(M.screen.x*math.random(0.5,2)), M.PXL.round(M.screen.y*math.random(0.5,2))
-    M.map.pellets = 0
-    --gen empty map
-    for x=1, M.map.x do
-        M.map[x] = {}
-        for y=1, M.map.y do
-            local cell = math.random() > 0.95 and 1 or 0 --0=empty, 1=pellet
-            M.map[x][y] = cell --0=empty, 1=pellet
+function M:mapgen(x,y,rate)
+    local rate = rate or 0.95
+    self.map = {offset={x=0,y=0}}
+    self.map.pellets = 0
+    self.map.x, self.map.y = self.PXL.round(self.screen.x*x), self.PXL.round(self.screen.y*y)
+    for x=1, self.map.x do
+        self.map[x] = {}
+        for y=1, self.map.y do
+            local cell = math.random() > rate and 1 or 0 --0=empty, 1=pellet
+            self.map[x][y] = cell --0=empty, 1=pellet
             if cell == 1 then
-                M.map.pellets = M.map.pellets+1
+                self.map.pellets = self.map.pellets+1
             end
         end
     end
-    --init player..
-    M.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
-    M.ai = AI({color=M.PXL.colors.cyan[2], headColor = M.PXL.colors.red[2], speed=5, canDie = false})--init ai
-    print(M.ai.canDie)
+end
+function M:gameinit() --partial game state init
+    local mapsize = self.menu.find("Map", true)
+    self:mapgen(mapsize[2], mapsize[3]) --regen mapgen
+    
+    local aispeed = self.menu.find("AI sp.", true)
+    local playerspeed = self.menu.find("P sp.", true)
+    SnakeInstances = {} -- clear old snakes
+    self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
+    self.player.speed = playerspeed--HACK
+    self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = false})--init ai
+    print(self.ai.canDie)
+end
+function M:load() -- full game state init
+    self.colormap = {
+        {0,0,0},
+        self.PXL.colors.purple[3]
+    }
+    self.state = "menu"
+    self.menu = {--menu option config
+        {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
+        {name = 'AI sp.', range={1, 20}, selected = 4},
+        {name = 'P sp.', range={1,20}, selected = 8}
+    }
+    function self.menu.find(name, getval) --return item with maatching name
+        for _, v in ipairs(self.menu) do
+            if v.name == name then 
+                if getval then
+                    return v.list and v.list[v.selected] or v.selected
+                else
+                    return v
+                end
+            end
+        end
+    end
+    self.menupos = 1
+    self:gameinit()
 end
 
 function M:update(dt)
@@ -236,27 +274,56 @@ function M:update(dt)
         self.state = 'done'
     end
 end
-function M:draw()
-    --draw score
-    love.graphics.setColor(self.PXL.colors.gray[3])
-    self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(self.ai.score),1)
-    love.graphics.setColor(self.PXL.colors.gray[2])
-    self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
-    love.graphics.push()
-    love.graphics.translate(self.map.offset.x, self.map.offset.y)
-    for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
-        for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
-            if self.map[x] and self.map[x][y] and self.map[x][y] ~=0 then
-                love.graphics.setColor(self.colormap[1+self.map[x][y]])
-                love.graphics.points(0.5+x, 0.5+y)
+function M:keypressed(key, sc, rep) 
+    if self.state == 'done' then
+        if key == "r" then
+            self.state = "menu"
+        end
+    elseif self.state == 'menu' then
+        if key == 'down' then 
+--             self.menupos = (self.menupos +1)%#self.menupos
+            self.menupos = roll(self.menupos, 1, #self.menu, 1)
+        elseif key == 'up' then
+--             self.menupos = self.menupos -1
+--             if self.menupos == 0 then self.menupos = #self.menupos end
+            self.menupos = roll(self.menupos, -1, #self.menu, 1)
+        elseif key == 'right' or key == 'left' then
+            local inc = key == "right" and 1 or -1
+            local line = self.menu[self.menupos]
+            if line.range then
+                line.selected = roll(line.selected, inc, line.range[2], line.range[1])
+            else
+                line.selected = roll(line.selected, inc, #line.list, 1)
             end
+        elseif key == "return" then
+            self.state = "run"
+            self:gameinit()
         end
     end
-    for _, snake in ipairs(SnakeInstances) do
-        snake:draw()
+end
+function M:draw()
+    --draw score
+    if self.state == 'run' or self.state == 'done' then
+        love.graphics.setColor(self.PXL.colors.gray[3])
+        self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(self.ai.score),1)
+        love.graphics.setColor(self.PXL.colors.gray[2])
+        self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
+        love.graphics.push()
+        love.graphics.translate(self.map.offset.x, self.map.offset.y)
+        for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
+            for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
+                if self.map[x] and self.map[x][y] and self.map[x][y] ~=0 then
+                    love.graphics.setColor(self.colormap[1+self.map[x][y]])
+                    love.graphics.points(0.5+x, 0.5+y)
+                end
+            end
+        end
+        for _, snake in ipairs(SnakeInstances) do
+            snake:draw()
+        end
+        love.graphics.pop()
     end
 --     love.graphics.setColor({255,0,0,127}); if self.ai._target then love.graphics.points(self.ai._target.x+.5, self.ai._target.y+.5) end --show ai target
-    love.graphics.pop()
     if self.state == 'dead' then
         love.graphics.setColor({255,0,0,100})
         love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
@@ -270,6 +337,12 @@ function M:draw()
             self.PXL.printCenter("You Win!")
         else
             self.PXL.printCenter("CPU Wins")
+        end
+    elseif self.state == 'menu' then
+        for i, line in ipairs(self.menu) do
+            love.graphics.setColor(i == self.menupos and self.PXL.colors.purple[3] or self.PXL.colors.gray[5])
+            self.PXL.printCenter(line.name .." ".. tostring(line.range and line.selected or line.list[line.selected][1]), i)
+--             self.PXL.printCenter({self.PXL.colors.gray[6], line.name, self.PXL.colors.gray[5], line.range and selected or line.list[line.selected]}, i)
         end
     end
 end
