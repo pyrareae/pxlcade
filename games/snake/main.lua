@@ -146,9 +146,22 @@ local AI = class(Snake)--the cake is a lie!
 function AI:init(...)
     Snake.init(self, ...)
     self:target() --init target
---     self.timer = Timer:new(200)
+    self._target, self._avoid = {x=self.pos.x,y=self.pos.y}, {x=0,y=0}
+    self.avtimer = Timer:new(350)
+    self.circledebug = {}--REMOVE
 end
-function AI:target()
+function AI:calcSqVel(dir) -- calculate new velocity from unbound 'dir' and snap it to vertical or horizontal
+    local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
+    self.vel.x = dir.x/div
+    self.vel.y = dir.y/div
+    --square movement
+    if math.abs(self.vel.x) == 1 then
+        self.vel.y = 0
+    else
+        self.vel.x = 0
+    end
+end
+function AI:target(mode)
     --search for nearest pellet
     local function search(x,y,rad)
         local co = {
@@ -174,6 +187,7 @@ function AI:target()
         if rad > math.max(self.map.x, self.map.y) then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,rad+1)--search next ring
     end
+    
     self._target = search(self.pos.x, self.pos.y, 1)
     if self._target.fail then --stop if all pellets are gone
         self.vel = {x=0,y=0}
@@ -181,15 +195,52 @@ function AI:target()
     end
     --calc vel to reach target
     local dir = {x=self._target.x - self.pos.x, y=self._target.y - self.pos.y}
-    local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
-    self.vel.x = dir.x/div
-    self.vel.y = dir.y/div
-    --square movement
-    if math.abs(self.vel.x) == 1 then
-        self.vel.y = 0
-    else
-        self.vel.x = 0
+    self:calcSqVel(dir)
+end
+function AI:avoid()
+    local blacklist = {}
+    for i, l in ipairs(SnakeInstances) do --find all other snakes
+        if l ~= self then
+            blacklist[#blacklist+1] = l.body
+        end
     end
+    blacklist = M.player.body--HACK
+    self._avoid = self:circlefind(blacklist) --check for anything nearby
+    if not self._avoid.fail then --found something
+        local dir = {x=-(self._avoid.x - self.pos.x), y=-(self._avoid.y - self.pos.y)}
+        self:calcSqVel(dir)
+    end
+end
+function AI:circlefind(list, radlim) -- search in a circular pattern for coords in 'list'
+    self.circledebug = {}
+    local radlim = radlim or 10 -- search radius
+    local function isin(a, b) --check if array 'a' is in array 'b'
+--         print(M.PXL.inspect(a))
+        for _, v in ipairs(b) do
+            local found = true
+            for k, iv in pairs(a) do
+                if iv ~= v[k] then found = false end
+            end
+            if found then return true end
+        end
+        return false
+    end
+    local round = M.PXL.round -- make typing less annoying
+    local function search(x,y,r)
+        for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
+            local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
+            if #self.circledebug == 0 or self.circledebug[#self.circledebug][1] ~= cirCoord.x or self.circledebug[#self.circledebug][2] ~= cirCoord.y then
+                self.circledebug[#self.circledebug+1] = {cirCoord.x, cirCoord.y}
+            end
+            if isin(cirCoord, list) then
+                return cirCoord
+            end
+        end
+        if r > radlim then return {x=0,y=0,fail=true} end --search limit
+        return search(x,y,r+1)--search next ring
+    end
+    local head = self.body[1]
+    return search(head.x, head.y, 1)
 end
 function AI:tick(dt)
 --square movement algo
@@ -199,11 +250,24 @@ function AI:tick(dt)
         if math.abs(self.vel.x) == 1 then
             if self._target.x == self.body[1].x then
                 self:target() --lazyness...
+                self:avoid()
             end
         else
             if self._target.y == self.body[1].y then
                 self:target()
+                self:avoid()
             end
+        end
+    end
+    if self.avtimer:every() then --know when to flee and when to stop fleeing
+        self:avoid()
+        if self._avoid.fail then
+            if not self.notrunning then
+                self:target()
+            end
+            self.notrunning = true
+        else
+            self.notrunning = nil
         end
     end
     
@@ -234,7 +298,6 @@ function M:gameinit() --partial game state init
     self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
     self.player.speed = playerspeed--HACK
     self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = false})--init ai
-    print(self.ai.canDie)
 end
 function M:load() -- full game state init
     self.colormap = {
@@ -245,7 +308,8 @@ function M:load() -- full game state init
     self.menu = {--menu option config
         {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
         {name = 'AI sp.', range={1, 20}, selected = 4},
-        {name = 'P sp.', range={1,20}, selected = 8}
+        {name = 'P sp.', range={1,20}, selected = 8},
+        {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=1}
     }
     function self.menu.find(name, getval) --return item with maatching name
         for _, v in ipairs(self.menu) do
@@ -304,12 +368,18 @@ end
 function M:draw()
     --draw score
     if self.state == 'run' or self.state == 'done' then
+        local renderDebug = self.menu.find("VisDebug", true)[2]
         love.graphics.setColor(self.PXL.colors.gray[3])
         self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(self.ai.score),1)
         love.graphics.setColor(self.PXL.colors.gray[2])
         self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
         love.graphics.push()
         love.graphics.translate(self.map.offset.x, self.map.offset.y)
+        
+        if renderDebug then--draw ai range debugging crap
+            love.graphics.setColor({0,255,255,20})
+            love.graphics.points(self.ai.circledebug)--
+        end
         for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
             for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
                 if self.map[x] and self.map[x][y] and self.map[x][y] ~=0 then
@@ -321,9 +391,15 @@ function M:draw()
         for _, snake in ipairs(SnakeInstances) do
             snake:draw()
         end
+        if renderDebug then --show ai targeting
+            love.graphics.setColor({255,0,0,200})
+            love.graphics.points(self.ai._target.x+.5, self.ai._target.y+.5)
+            love.graphics.setColor({255,255,0,200})
+            if not self.ai._avoid.fail then love.graphics.points(self.ai._avoid.x+.5, self.ai._avoid.y+.5) end
+        end
+        
         love.graphics.pop()
     end
---     love.graphics.setColor({255,0,0,127}); if self.ai._target then love.graphics.points(self.ai._target.x+.5, self.ai._target.y+.5) end --show ai target
     if self.state == 'dead' then
         love.graphics.setColor({255,0,0,100})
         love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
