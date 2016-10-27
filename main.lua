@@ -100,7 +100,7 @@ function Games:load()
     self.list = {}
     PXL.state = 'menu'
     for k, name in ipairs(list) do
-        print(k..": "..name)
+        print('[pxl]'..k..": "..name)
         local reqpath = "games."..name..".main"
         local path = "games/"..name.."/main.lua"
         self.list[k] = love.filesystem.load(path)()
@@ -194,6 +194,7 @@ function love.load()
     PXL.timers.arrow = timer:new(PXL.options.anim.btn):pause()
     PXL.timers.slide = timer:new(PXL.options.anim.slide):pause()
     PXL.timers.text  = timer:new(PXL.options.anim.text/2):pause()
+    PXL.timers.fxupdate = timer:new(500):pause()
     
     --build grain FX
     PXL.grain = shine.filmgrain()
@@ -271,9 +272,12 @@ function love.update(dt)
     PXL.games:updateCheck() -- watch subgames for changes (in main.lua)
     local res = {love.graphics.getHeight(), love.graphics.getWidth()}
     if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
-        buildFX() --the shine lib doesn't update for changing screen sizes itself so we do it here
+        PXL.timers.fxupdate:start() -- delay the actual fx rebuild event because it makes resizing the window super laggy
         PXL.lastres = res
-        print("fx rebuilt"..PXL.inspect(res)..PXL.inspect(PXL.lastres))
+    end
+    if PXL.timers.fxupdate:once() then
+        buildFX() --the shine lib doesn't update for changing screen sizes itself so we do it here
+        print("[pxl]fx rebuilt"..PXL.inspect(res)..PXL.inspect(PXL.lastres))
     end
     
     if PXL.timers.intro:once() then

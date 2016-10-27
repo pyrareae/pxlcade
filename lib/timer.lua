@@ -24,7 +24,7 @@ end
 
 function T:resume() -- restart countdown
     self.stopped = false
-    self.last = self.millis()-self._remaining
+    self.last = self.millis()-self._remaining or 0
 end
 
 function T:start(time) --resume + reset
