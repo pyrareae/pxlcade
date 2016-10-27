@@ -1,5 +1,5 @@
 local class = require('lib.class')
-local Timer = require('timer')
+local Timer = require('lib.timer')
 local M = {
     name="Snake",
 }

@@ -3,4 +3,5 @@
     t.window.height = 480
     t.window.resizable = true
     t.window.title = "Pxlcade"
+    t.console = true
 end

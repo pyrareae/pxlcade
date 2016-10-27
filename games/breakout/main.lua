@@ -1,4 +1,4 @@
-local timer = require "timer"
+local timer = require "lib.timer"
 local M = {
 name = "Breakout",
 c = {},

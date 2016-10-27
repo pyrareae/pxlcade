@@ -1,8 +1,18 @@
-local timer = require("timer")
+local timer = require("lib.timer")
 local shine = require('lib.shine')
+local class = require('lib.class')
 local PXL = {}
-local games = {}
+
 --helpers
+local function saferun(func, ...)
+    ok, msg = pcall(func, ...)
+    if not ok then
+        print(msg)
+    end
+end
+local function safemethodrun(obj, funcname, ...)
+    saferun(obj[funcname], obj, ...)
+end
 PXL.inspect = require('lib.inspect')
 function PXL.shallowcopy(orig) -- http://lua-users.org/wiki/CopyTable
     local orig_type = type(orig)
@@ -33,24 +43,80 @@ function PXL.printCenter(text, row, offset)
     end
 end
 
-games.selected = 1
+-- games.selected = 1
 -- PXL.state = 'intro'
 PXL.state = 'menu'
-function games:active()
-    return self[self.selected]
+
+local Games = class()
+function Games:init()
+    self.selected = 1
+    self.updateTimes = {} -- store file update times
+    self.list = {}
+    self.timer = timer:new(2000)
+    self:load()
+    self:updateCheck()
 end
-function games:gotoNext()
-    self.selected = (self.selected + 1) <= #self and (self.selected + 1) or 1
+function Games:active()
+    return self.list[self.selected]
 end
-function games:gotoPrev()
-    self.selected = (self.selected - 1) > 0 and (self.selected - 1) or #self
+function Games:gotoNext()
+    self.selected = (self.selected + 1) <= #self.list and (self.selected + 1) or 1
 end
-function games:next()--returns next game
-    return self[(self.selected + 1) <= #self and (self.selected + 1) or 1] --rollback increment
+function Games:gotoPrev()
+    self.selected = (self.selected - 1) > 0 and (self.selected - 1) or #self.list
 end
-function games:prev()
-    return self[(self.selected - 1) > 0 and (self.selected - 1) or #self] --rollback decrement
+function Games:next()--returns next game
+    return self.list[(self.selected + 1) <= #self.list and (self.selected + 1) or 1] --rollback increment
 end
+function Games:prev()
+    return self.list[(self.selected - 1) > 0 and (self.selected - 1) or #self.list] --rollback decrement
+end
+
+function Games:updateCheck()--check for updates in games and reload the files
+    if not self.timer:every() then return end
+    local dirty = false
+    for i, v in ipairs(self.list) do
+        local modtime, err = love.filesystem.getLastModified(v.path)
+--         print(err)
+--         print(string.format("%i :: %i -- %s",self.updateTimes[i]or 0, modtime or 0, v.path))
+        if self.updateTimes[i] then
+            if self.updateTimes[i] ~= modtime then
+                dirty = true
+                self.updateTimes[i] = modtime
+            end
+        else--first run
+            self.updateTimes[i] = modtime
+        end
+    end
+    if dirty then 
+        print("[pxl]reload triggered")
+        self:load()
+    end
+end
+
+function Games:load()
+    print("[pxl]loading subgames")
+    local list = love.filesystem.getDirectoryItems( 'games' )
+    self.list = {}
+    PXL.state = 'menu'
+    for k, name in ipairs(list) do
+        print(k..": "..name)
+        local reqpath = "games."..name..".main"
+        local path = "games/"..name.."/main.lua"
+        self.list[k] = love.filesystem.load(path)()
+        self.list[k].reqpath = reqpath
+        self.list[k].path = path
+        self.list[k].cwd = "games/"..name.."/" -- tell the module it's directory path
+        if love.filesystem.exists("games/"..name.."/icon.png") then --check for title image
+            self.list[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
+        else
+            self.list[k].icon = love.graphics.newImage("images/no_icon.png")
+        end
+        self.list[k].screen = PXL.screen--give the module screen a ref to screen(which makes no sense with the next line)
+        self.list[k].PXL = PXL
+    end
+end
+
 PXL.lastres = {0,0}
 PXL.options={--setting here!
     fx = { -- filters
@@ -119,6 +185,7 @@ end
 
 function love.load()
     --generic setup
+    PXL.games = Games()--include games
     math.randomseed( os.time() ) --xaos yo!
     love.mouse.setVisible(false)
     PXL.screen.canvas = love.graphics.newCanvas(PXL.screen.x,PXL.screen.y)
@@ -159,53 +226,37 @@ function love.load()
     --better names
     PXL.colors.gray = PXL.colors[1];PXL.colors.magenta = PXL.colors[2];PXL.colors.purple=PXL.colors[3];PXL.colors.cyan = PXL.colors[4];PXL.colors.blue = PXL.colors[5];PXL.colors.red=PXL.colors[6];PXL.colors.orange = PXL.colors[7]
     
-    --include games
-    print("loading subgames")
-    local list = love.filesystem.getDirectoryItems( 'games' )
-    for k, name in ipairs(list) do
-        print(k..": "..name)
-        games[k] = require("games."..name..".main")
-        games[k].cwd = "games/"..name.."/" -- tell the module it's directory path
-        if love.filesystem.exists("games/"..name.."/icon.png") then --check for title image
-            games[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
-        else
-            games[k].icon = love.graphics.newImage("images/no_icon.png")
-        end
-        games[k].screen = PXL.screen--give the module screen a ref to screen(which makes no sense with the next line)
-        games[k].PXL = PXL
-    
-    end
     --is state is shorted to 'game' on init
     if PXL.state == 'game' then
-        games:active():load()
+        safemethodrun(self.games:active(), 'load')
         PXL.timers.intro:pause()
     end
 end
 function love.mousemoved( x, y, dx, dy, istouch )
-    if PXL.state == 'game' and games:active().mousemoved then
-        games:active().mousemoved(x,y,dx,dy,istouch)
+    if PXL.state == 'game' and PXL.games:active().mousemoved then
+        PXL.games:active().mousemoved(x,y,dx,dy,istouch)
     end
 end
 function love.keypressed(key, screencode, isrepeat)
     if PXL.state == 'menu' and not isrepeat then
         if key == "return" then
             PXL.state = 'game'
-            games:active():load()
+            PXL.games:active():load()
         elseif key == "right" then
-            games:gotoNext()
+            PXL.games:gotoNext()
             PXL.states.arrow = "right out"
             PXL.states.slide = "next"
             PXL.anim.text.state = 'start'
         elseif key == "left" then
-            games:gotoPrev()
+            PXL.games:gotoPrev()
             PXL.states.arrow = "left out"
             PXL.states.slide = "prev"
             PXL.anim.text.state = 'start'
         elseif key == 'q' then
             love.event.push('quit')
         end
-    elseif PXL.state == 'game' and games:active().keypressed then
-        games:active():keypressed(key, screencode, isrepeat)
+    elseif PXL.state == 'game' and PXL.games:active().keypressed then
+        safemethodrun(PXL.games:active(), 'keypressed', key, screencode, isrepeat)
     end
     if key == '1' then--fx toggling
         PXL.options.fx.crt = not PXL.options.fx.crt
@@ -217,6 +268,7 @@ function love.keypressed(key, screencode, isrepeat)
     end
 end
 function love.update(dt)
+    PXL.games:updateCheck() -- watch subgames for changes (in main.lua)
     local res = {love.graphics.getHeight(), love.graphics.getWidth()}
     if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
         buildFX() --the shine lib doesn't update for changing screen sizes itself so we do it here
@@ -252,14 +304,14 @@ function love.update(dt)
         --image anim
         if PXL.states.slide == "next" then
             PXL.anim.slide.offset = 0
-            PXL.anim.slide.imga = games:prev().icon
-            PXL.anim.slide.imgb = games:active().icon
+            PXL.anim.slide.imga = PXL.games:prev().icon
+            PXL.anim.slide.imgb = PXL.games:active().icon
             PXL.states.slide = "next anim"
             PXL.timers.slide:start()
         elseif PXL.states.slide == "prev" then
             PXL.anim.slide.offset = 60
-            PXL.anim.slide.imga = games:active().icon
-            PXL.anim.slide.imgb = games:next().icon
+            PXL.anim.slide.imga = PXL.games:active().icon
+            PXL.anim.slide.imgb = PXL.games:next().icon
             PXL.states.slide = "prev anim"
             PXL.timers.slide:start()
         end
@@ -280,7 +332,7 @@ function love.update(dt)
             if PXL.timers.text:check() then
                 PXL.timers.text:start()
                 PXL.anim.text.state = "up"
-                PXL.anim.text.text = games:active().name
+                PXL.anim.text.text = PXL.games:active().name
             end
         elseif PXL.anim.text.state == 'up' then 
             PXL.anim.text.offset = PXL.timers.text:percent(true)*8
@@ -288,12 +340,12 @@ function love.update(dt)
                 PXL.anim.text.state = 'final'
             end
         end if PXL.anim.text.state == 'final' then
-            PXL.anim.text.text = games:active().name --for init
+            PXL.anim.text.text = PXL.games:active().name --for init
             PXL.anim.text.offset = 0
             PXL.anim.state = 'idle'
         end
-    elseif PXL.state == 'game' and games:active().update then
-        games:active():update(dt)
+    elseif PXL.state == 'game' and PXL.games:active().update then
+        safemethodrun(PXL.games:active(), 'update', dt)
     end
 end
 local function draw()
@@ -308,7 +360,7 @@ local function draw()
     local function smalldraw()
         if PXL.state == 'menu' then
             if PXL.states.slide == 'idle' then
-                love.graphics.draw(games:active().icon, 8,1)
+                love.graphics.draw(PXL.games:active().icon, 8,1)
             else
                 love.graphics.draw(PXL.anim.slide.imga, 8-PXL.anim.slide.offset,1)
                 love.graphics.draw(PXL.anim.slide.imgb, 68-PXL.anim.slide.offset,1)
@@ -332,7 +384,7 @@ local function draw()
         elseif PXL.state == 'intro' then
             love.graphics.draw(PXL.images.banner, 0,0)
         elseif PXL.state == 'game' then
-            games:active():draw()
+            safemethodrun(PXL.games:active(), 'draw')
         end
         
         if PXL.options.fx.grain then
