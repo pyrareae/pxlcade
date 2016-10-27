@@ -8,6 +8,8 @@ local function saferun(func, ...)
     ok, msg = pcall(func, ...)
     if not ok then
         print(msg)
+    else
+        return msg --if no error this should be the return val
     end
 end
 local function safemethodrun(obj, funcname, ...)
@@ -44,8 +46,8 @@ function PXL.printCenter(text, row, offset)
 end
 
 -- games.selected = 1
--- PXL.state = 'intro'
-PXL.state = 'menu'
+PXL.state = 'intro'
+-- PXL.state = 'menu'
 
 local Games = class()
 function Games:init()
@@ -53,6 +55,7 @@ function Games:init()
     self.updateTimes = {} -- store file update times
     self.list = {}
     self.timer = timer:new(2000)
+    print("[pxl]Loading subgames. Watching for updates in main.lua files")
     self:load()
     self:updateCheck()
 end
@@ -89,13 +92,12 @@ function Games:updateCheck()--check for updates in games and reload the files
         end
     end
     if dirty then 
-        print("[pxl]reload triggered")
+        print("[pxl]Reload triggered")
         self:load()
     end
 end
 
 function Games:load()
-    print("[pxl]loading subgames")
     local list = love.filesystem.getDirectoryItems( 'games' )
     self.list = {}
     PXL.state = 'menu'
@@ -103,17 +105,21 @@ function Games:load()
         print('[pxl]'..k..": "..name)
         local reqpath = "games."..name..".main"
         local path = "games/"..name.."/main.lua"
-        self.list[k] = love.filesystem.load(path)()
-        self.list[k].reqpath = reqpath
-        self.list[k].path = path
-        self.list[k].cwd = "games/"..name.."/" -- tell the module it's directory path
-        if love.filesystem.exists("games/"..name.."/icon.png") then --check for title image
-            self.list[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
-        else
-            self.list[k].icon = love.graphics.newImage("images/no_icon.png")
+        self.list[k] = saferun(function () return love.filesystem.load(path)() end)
+        if self.list[k] then --success!
+            self.list[k].reqpath = reqpath
+            self.list[k].path = path
+            self.list[k].cwd = "games/"..name.."/" -- tell the module it's directory path
+            if love.filesystem.exists("games/"..name.."/icon.png") then --check for title image
+                self.list[k].icon = love.graphics.newImage("games/"..name.."/icon.png")
+            else
+                self.list[k].icon = love.graphics.newImage("images/no_icon.png")
+            end
+            self.list[k].screen = PXL.screen--give the module screen a ref to screen(which makes no sense with the next line)
+            self.list[k].PXL = PXL
+        else --failed to init game
+            print("[pxl] Failed to init "..name)
         end
-        self.list[k].screen = PXL.screen--give the module screen a ref to screen(which makes no sense with the next line)
-        self.list[k].PXL = PXL
     end
 end
 
