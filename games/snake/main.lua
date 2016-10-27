@@ -1,5 +1,6 @@
 local class = require('lib.class')
 local Timer = require('lib.timer')
+local inspect = require('lib.inspect')
 local M = {
     name="Snake",
 }
@@ -25,10 +26,11 @@ local function roll(val, inc, ceil, floor)
 end
 
 local Snake = class()
-SnakeInstances = {}
+-- SnakeInstances = {}
+Snake.static.instances = {} --class only shallow copies so this should work
 function Snake:init(opt)
 --     local args = args or {} --(make calling without args work)
-    SnakeInstances[#SnakeInstances+1] = self--register self
+    self.static.instances[#self.static.instances+1] = self--register self
     self.map = M.map
     self.length = opt.length or 5
     self.vel = opt.vel or {x=0,y=0}
@@ -40,6 +42,8 @@ function Snake:init(opt)
     self.score = 0
     self.canDie = opt.canDie == nil and true or opt.canDie 
     self.dead = false
+    self.selfCollision = opt.selfCollision or false
+--     self.startStretched = opt.startStretched or true
     if not self.pos then
         self.pos = {x=math.random(1, self.map.x),y= math.random(1,self.map.y)}
     end
@@ -69,16 +73,23 @@ function Snake:tick(dt) --update function
     --check for other snake
     local head = self.body[1]
     if self.canDie then
-        for i, s in ipairs(SnakeInstances) do
-            if s ~= self then --ignore self colision
-                for _, seg in ipairs(s.body) do --loop over body and check for collision
-                    if head.x == seg.x and head.y == seg.y then
-                        self.dead = true
-                    end
+        self.dead = self:collisionCheck()
+    end
+end
+
+function Snake:collisionCheck()
+    local head = self.body[1]
+    for i, s in ipairs(self.static.instances) do
+        if self.selfCollision or s ~= self then --ignore self colision (or not)
+            for _, seg in ipairs(s.body) do --loop over body and check for collision
+                if head.x == seg.x and head.y == seg.y and 
+                    seg ~= head then --don't count your own head as a collision
+                    return true
                 end
             end
         end
     end
+    return false
 end
 
 function Snake:rebuildBody()
@@ -151,6 +162,8 @@ function AI:init(opt)
     self.circledebug = {}
     self.notrunning  = true
     self.avoidRad = opt.avoidrad or 10
+    if not self.static.instances.ai then self.static.instances.ai = {} end
+    self.static.instances.ai[#self.static.instances.ai+1]= self
 end
 function AI:calcSqVel(dir) -- calculate new velocity from unbound 'dir' and snap it to vertical or horizontal
     local div = math.max(math.abs(dir.x), math.abs(dir.y))--get denominator
@@ -201,7 +214,7 @@ function AI:target(mode)
 end
 function AI:avoid()
     local blacklist = {}
-    for i, l in ipairs(SnakeInstances) do --find all other snakes
+    for i, l in ipairs(self.static.instances) do --find all other snakes
         if l ~= self then
             blacklist[#blacklist+1] = l.body
         end
@@ -244,10 +257,43 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
     local head = self.body[1]
     return search(head.x, head.y, 1)
 end
+function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisions
+    local headptr = self.body[1]
+    local headcopy = M.PXL.shallowcopy(headptr)
+    local depth = depth or 1
+    if depth > 4 then--stuck in a loop
+        print("failed to avoid barrier")
+        return
+    end
+    local function inc()
+        for k, v in pairs(headptr) do--apply one movement to headcopy
+            headptr[k] = v + self.vel[k]
+        end
+    end
+    inc()
+    if self:collisionCheck() then 
+        self.body[1] = headcopy --reset head
+        local ccwvel, vel = {x=-self.vel.y, y=self.vel.x} --[[rotate 90 degrees ccw]], {x=self.vel.y, y=-self.vel.x}
+        self.vel = ccw and ccwvel or vel --rotate 90 degrees
+        inc()
+        print(inspect(self.vel))
+        if self:checkNoSelfCollide(depth+1) then return true end--check again
+        if self:checkNoSelfCollide(depth+1, true) then return true end
+    elseif depth > 1 then --in recursion (end yes?)
+        self.body[1] = headcopy --reset head
+        self.pos = M.PXL.shallowcopy(headptr)
+        print("end")
+        return true
+    end
+    self.body[1] = headcopy --reset head
+    return false
+end
 function AI:tick(dt)
---square movement algo
     local head = M.PXL.shallowcopy(self.body[1])
+    --avoid self collisions
+    self:checkNoSelfCollide()
     Snake.tick(self, dt)
+    --square movement algo
     if head ~= self.body[1] then --if moved
         if math.abs(self.vel.x) == 1 then
             if self._target.x == self.body[1].x then
@@ -261,13 +307,18 @@ function AI:tick(dt)
             end
         end
     end
+    --check for other snakes to avoid every X
     if self.avtimer:every() then
         self:avoid()
         if self._avoid.fail then
             self:target()
         end
     end
-    
+end
+function AI:runAll(name, ...) --method on all instances\
+    for i, inst in ipairs(self.static.instances.ai) do
+        inst[name](inst,...)
+    end
 end
 function M:mapgen(x,y,rate)
     local rate = rate or 0.95
@@ -285,17 +336,39 @@ function M:mapgen(x,y,rate)
         end
     end
 end
+local function cpuscore()
+    local score = 0
+    for _, ai in ipairs(Snake.static.instances.ai) do
+        score = score + ai.score
+    end
+    return score/#Snake.static.instances.ai
+end
+local function cpudead()
+    for _, ai in ipairs(Snake.static.instances.ai) do
+        if not ai.dead then
+            return false
+        end
+    end
+    return true
+end
 function M:gameinit() --partial game state init
     local mapsize = self.menu.find("Map", true)
     local avoidrad = self.menu.find("AIavoid", true)
     self:mapgen(mapsize[2], mapsize[3]) --regen mapgen
+    local aiCount = self.menu.find("AIcount", true)
+    local avoidTime = self.menu.find("avoidT", true)
     
     local aispeed = self.menu.find("AI sp.", true)
     local playerspeed = self.menu.find("P sp.", true)
-    SnakeInstances = {} -- clear old snakes
-    self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}})--spawn player centered
-    self.player.speed = playerspeed--HACK
-    self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=1000, avoidrad=avoidrad})--init ai
+    Snake.static.instances = {} -- clear old snakes
+--     self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = 5, speed = playerspeed})--spawn player centered
+--     self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=1000, avoidrad=avoidrad})--init ai
+    --testing
+    self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = 20, speed = playerspeed})--spawn player centered
+    for i=1, aiCount do
+        local name = i==1 and 'ai' or 'ai'..tostring(i)
+        self[name] = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=avoidTime*100, avoidrad=avoidrad, selfCollision = false})--init ai
+    end
 end
 function M:load() -- full game state init
     self.colormap = {
@@ -304,11 +377,15 @@ function M:load() -- full game state init
     }
     self.state = "menu"
     self.menu = {--menu option config
+        maxh = 5, --when to scroll down
+        pos = 1,
         {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
         {name = 'AI sp.', range={1, 20}, selected = 4},
         {name = 'P sp.', range={1,20}, selected = 8},
         {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
-        {name = 'AIavoid', range={1, 20}, selected = 5}
+        {name = 'AIavoid', range={1, 20}, selected = 5},
+        {name = 'AIcount', range={1, 20}, selected = 4},
+        {name = 'avoidT', range={1, 10}, selected = 5}
     }
     function self.menu.find(name, getval) --return item with maatching name
         for _, v in ipairs(self.menu) do
@@ -321,7 +398,7 @@ function M:load() -- full game state init
             end
         end
     end
-    self.menupos = 1
+    self.menu.pos = 1
     self:gameinit()
 end
 
@@ -329,10 +406,10 @@ function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
         self.player:tick(dt)
-        if self.ai.dead then self.state = 'done' end
+        if cpudead() then self.state = 'done' end
     end
     if self.state ~= 'done' then
-        self.ai:tick(dt)
+        self.ai:runAll('tick', dt)
     end
     if self.map.pellets == 0 then
         self.state = 'done'
@@ -345,15 +422,15 @@ function M:keypressed(key, sc, rep)
         end
     elseif self.state == 'menu' then
         if key == 'down' then 
---             self.menupos = (self.menupos +1)%#self.menupos
-            self.menupos = roll(self.menupos, 1, #self.menu, 1)
+--             self.menu.pos = (self.menu.pos +1)%#self.menu.pos
+            self.menu.pos = roll(self.menu.pos, 1, #self.menu, 1)
         elseif key == 'up' then
---             self.menupos = self.menupos -1
---             if self.menupos == 0 then self.menupos = #self.menupos end
-            self.menupos = roll(self.menupos, -1, #self.menu, 1)
+--             self.menu.pos = self.menu.pos -1
+--             if self.menu.pos == 0 then self.menu.pos = #self.menu.pos end
+            self.menu.pos = roll(self.menu.pos, -1, #self.menu, 1)
         elseif key == 'right' or key == 'left' then
             local inc = key == "right" and 1 or -1
-            local line = self.menu[self.menupos]
+            local line = self.menu[self.menu.pos]
             if line.range then
                 line.selected = roll(line.selected, inc, line.range[2], line.range[1])
             else
@@ -370,15 +447,17 @@ function M:draw()
     if self.state == 'run' or self.state == 'done' then
         local renderDebug = self.menu.find("VisDebug", true)[2]
         love.graphics.setColor(self.PXL.colors.gray[3])
-        self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(self.ai.score),1)
+        self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(cpuscore()),1)
         love.graphics.setColor(self.PXL.colors.gray[2])
         self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
         love.graphics.push()
         love.graphics.translate(self.map.offset.x, self.map.offset.y)
         
         if renderDebug then--draw ai range debugging crap
-            love.graphics.setColor({0,255,255,20})
-            love.graphics.points(self.ai.circledebug)--
+            for _, ai in ipairs(Snake.static.instnces.ai) do
+                love.graphics.setColor({0,255,255,20})
+                love.graphics.points(ai.circledebug)--
+            end
         end
         for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
             for y=1-self.map.offset.y, self.screen.y-self.map.offset.y do
@@ -388,14 +467,17 @@ function M:draw()
                 end
             end
         end
-        for _, snake in ipairs(SnakeInstances) do
+        for _, snake in ipairs(Snake.static.instances) do
             snake:draw()
         end
+--         M.ai:runall('draw')
         if renderDebug then --show ai targeting
-            love.graphics.setColor({255,0,0,200})
-            love.graphics.points(self.ai._target.x+.5, self.ai._target.y+.5)
-            love.graphics.setColor({255,255,0,200})
-            if not self.ai._avoid.fail then love.graphics.points(self.ai._avoid.x+.5, self.ai._avoid.y+.5) end
+            for _, ai in ipairs(Snake.static.instnces.ai) do
+                love.graphics.setColor({255,0,0,200})
+                love.graphics.points(ai._target.x+.5, ai._target.y+.5)
+                love.graphics.setColor({255,255,0,200})
+                if not ai._avoid.fail then love.graphics.points(ai._avoid.x+.5, ai._avoid.y+.5) end
+            end
         end
         
         love.graphics.pop()
@@ -409,15 +491,16 @@ function M:draw()
         love.graphics.setColor({255,255,255,70})
         love.graphics.rectangle('fill',0,0,self.screen.x,self.screen.y)
         love.graphics.setColor({255,255,255,255})
-        if self.player.score > self.ai.score or self.ai.dead then
+        if self.player.score > cpuscore() or cpudead() then
             self.PXL.printCenter("You Win!")
         else
             self.PXL.printCenter("CPU Wins")
         end
     elseif self.state == 'menu' then
         for i, line in ipairs(self.menu) do
-            love.graphics.setColor(i == self.menupos and self.PXL.colors.purple[3] or self.PXL.colors.gray[5])
-            self.PXL.printCenter(line.name .." ".. tostring(line.range and line.selected or line.list[line.selected][1]), i)
+            local offset = self.menu.pos > self.menu.maxh and self.menu.pos - self.menu.maxh or 0 --calc offset if needed
+            love.graphics.setColor(i == self.menu.pos and self.PXL.colors.purple[3] or self.PXL.colors.gray[5])
+            self.PXL.printCenter(line.name .." ".. tostring(line.range and line.selected or line.list[line.selected][1]), i-offset)
 --             self.PXL.printCenter({self.PXL.colors.gray[6], line.name, self.PXL.colors.gray[5], line.range and selected or line.list[line.selected]}, i)
         end
     end

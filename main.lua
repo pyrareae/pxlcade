@@ -3,6 +3,21 @@ local shine = require('lib.shine')
 local class = require('lib.class')
 local PXL = {}
 
+PXL.options={--setting here!
+    fx = { -- filters
+        crt = false,
+        grain = false,
+        gpugrain = true,
+        crtwarp = true
+    },
+    anim = {
+        intro = 1000,
+        btn = 100,
+        slide = 250,
+        text = 150
+    }
+}
+
 --helpers
 local function saferun(func, ...)
     ok, msg = pcall(func, ...)
@@ -46,7 +61,6 @@ function PXL.printCenter(text, row, offset)
 end
 
 -- games.selected = 1
-PXL.state = 'intro'
 -- PXL.state = 'menu'
 
 local Games = class()
@@ -94,13 +108,13 @@ function Games:updateCheck()--check for updates in games and reload the files
     if dirty then 
         print("[pxl]Reload triggered")
         self:load()
+        PXL.state = 'menu'
     end
 end
 
 function Games:load()
     local list = love.filesystem.getDirectoryItems( 'games' )
     self.list = {}
-    PXL.state = 'menu'
     for k, name in ipairs(list) do
         print('[pxl]'..k..": "..name)
         local reqpath = "games."..name..".main"
@@ -124,20 +138,6 @@ function Games:load()
 end
 
 PXL.lastres = {0,0}
-PXL.options={--setting here!
-    fx = { -- filters
-        crt = false,
-        grain = false,
-        gpugrain = true,
-        crtwarp = true
-    },
-    anim = {
-        intro = 500,
-        btn = 100,
-        slide = 250,
-        text = 150
-    }
-}
 PXL.screen = {
     x = 64,--internal render size
     y = 48,
@@ -237,6 +237,8 @@ function love.load()
     if PXL.state == 'game' then
         safemethodrun(self.games:active(), 'load')
         PXL.timers.intro:pause()
+    else
+        PXL.state = 'intro' --because load and such mess with this
     end
 end
 function love.mousemoved( x, y, dx, dy, istouch )
