@@ -77,10 +77,11 @@ function Snake:tick(dt) --update function
     end
 end
 
-function Snake:collisionCheck()
+function Snake:collisionCheck(selfcoll)
+    local selfcoll = selcoll or self.selfCollision
     local head = self.body[1]
     for i, s in ipairs(self.static.instances) do
-        if self.selfCollision or s ~= self then --ignore self colision (or not)
+        if selfcoll or s ~= self then --ignore self colision (or not)
             for _, seg in ipairs(s.body) do --loop over body and check for collision
                 if head.x == seg.x and head.y == seg.y and 
                     seg ~= head then --don't count your own head as a collision
@@ -159,7 +160,6 @@ function AI:init(opt)
     self:target() --init target
     self._target, self._avoid = {x=self.pos.x,y=self.pos.y}, {x=0,y=0}
     self.avtimer = Timer:new(opt.avoidtime or 500)
-    self.circledebug = {}
     self.notrunning  = true
     self.avoidRad = opt.avoidrad or 10
     if not self.static.instances.ai then self.static.instances.ai = {} end
@@ -227,7 +227,6 @@ function AI:avoid()
     end
 end
 function AI:circlefind(list, radlim) -- search in a circular pattern for coords in 'list'
-    self.circledebug = {}
     local radlim = radlim or 10 -- search radius
     local function isin(a, b) --check if array 'a' is in array 'b'
 --         print(M.PXL.inspect(a))
@@ -244,9 +243,6 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
     local function search(x,y,r)
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
             local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
-            if #self.circledebug == 0 or self.circledebug[#self.circledebug][1] ~= cirCoord.x or self.circledebug[#self.circledebug][2] ~= cirCoord.y then
-                self.circledebug[#self.circledebug+1] = {cirCoord.x, cirCoord.y}
-            end
             if isin(cirCoord, list) then
                 return cirCoord
             end
@@ -271,12 +267,12 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         end
     end
     inc()
-    if self:collisionCheck() then 
+    if self:collisionCheck(true) then 
         self.body[1] = headcopy --reset head
         local ccwvel, vel = {x=-self.vel.y, y=self.vel.x} --[[rotate 90 degrees ccw]], {x=self.vel.y, y=-self.vel.x}
         self.vel = ccw and ccwvel or vel --rotate 90 degrees
         inc()
-        print(inspect(self.vel))
+        print("rotated vel ".. (ccw and 'ccw' or 'cw'))
         if self:checkNoSelfCollide(depth+1) then return true end--check again
         if self:checkNoSelfCollide(depth+1, true) then return true end
     elseif depth > 1 then --in recursion (end yes?)
@@ -364,7 +360,7 @@ function M:gameinit() --partial game state init
 --     self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = 5, speed = playerspeed})--spawn player centered
 --     self.ai = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=1000, avoidrad=avoidrad})--init ai
     --testing
-    self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = 20, speed = playerspeed})--spawn player centered
+    self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = nil, speed = playerspeed})--spawn player centered
     for i=1, aiCount do
         local name = i==1 and 'ai' or 'ai'..tostring(i)
         self[name] = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=avoidTime*100, avoidrad=avoidrad, selfCollision = false})--init ai
@@ -385,9 +381,9 @@ function M:load() -- full game state init
         {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
         {name = 'AIavoid', range={1, 20}, selected = 5},
         {name = 'AIcount', range={1, 20}, selected = 4},
-        {name = 'avoidT', range={1, 10}, selected = 5}
+        {name = 'avoidT', range={2, 15}, selected = 5}
     }
-    function self.menu.find(name, getval) --return item with maatching name
+    function self.menu.find(name, getval) --return item with matching name
         for _, v in ipairs(self.menu) do
             if v.name == name then 
                 if getval then
@@ -455,8 +451,8 @@ function M:draw()
         
         if renderDebug then--draw ai range debugging crap
             for _, ai in ipairs(Snake.static.instnces.ai) do
-                love.graphics.setColor({0,255,255,20})
-                love.graphics.points(ai.circledebug)--
+--                 love.graphics.setColor({0,255,255,20})
+--                 love.graphics.points(ai.circledebug)--
             end
         end
         for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
