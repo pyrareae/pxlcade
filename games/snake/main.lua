@@ -34,7 +34,7 @@ function Snake:init(opt)
     self.map = M.map
     self.length = opt.length or 5
     self.vel = opt.vel or {x=0,y=0}
-    self.body = {}--NOTE keep body vals whole numbers
+    self.body = {}
     self.color = opt.color or M.PXL.colors.blue[2]
     self.headColor = opt.headColor or M.PXL.colors.orange[3]
     self.speed = opt.speed or 6
@@ -63,11 +63,11 @@ function Snake:tick(dt) --update function
     end
     local head = self.body[1]
     --check for pellet
-    if self.map[head.x] and self.map[head.x][head.y] == 1 then --TODO add rollover handler
+    if self.map[head[1]] and self.map[head[1]][head[2]] == 1 then --TODO add rollover handler
         self.length = self.length+1 --Yum!
         self.score = self.score+1
         self.map.pellets = self.map.pellets -1
-        self.map[head.x][head.y] = 0
+        self.map[head[1]][head[2]] = 0
         self.speed = self.speed+0.01 --make each pellet boost speed 
     end
     --check for other snake
@@ -83,7 +83,7 @@ function Snake:collisionCheck(selfcoll)
     for i, s in ipairs(self.static.instances) do
         if selfcoll or s ~= self then --ignore self colision (or not)
             for _, seg in ipairs(s.body) do --loop over body and check for collision
-                if head.x == seg.x and head.y == seg.y and 
+                if head[1] == seg[1] and head[2] == seg[2] and 
                     seg ~= head then --don't count your own head as a collision
                     return true
                 end
@@ -95,14 +95,14 @@ end
 
 function Snake:rebuildBody()
     local new = {}
-    new[1] = {x=M.PXL.round(self.pos.x), y=M.PXL.round(self.pos.y)}
+    new[1] = {M.PXL.round(self.pos.x), M.PXL.round(self.pos.y)}
     for i=1, math.min(#self.body+1,self.length-1) do--loop through all but the last shifting the body
         new[i+1] = self.body[i] or new[i]
     end
     self.body = new
 end
 
-function Snake:draw()
+function Snake:draw_()
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
        local factor = math.exp(1)^(-x/(50+self.length/2)) --change gradient based on len
@@ -117,10 +117,16 @@ function Snake:draw()
         love.graphics.setColor(fadecolor(self.color, i))
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
         if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
-        love.graphics.points(seg.x+0.5, seg.y+0.5)
+        love.graphics.points(seg[1]+0.5, seg[1]+0.5)
     end
 end
-
+function Snake:draw()
+    love.graphics.push()
+    love.graphics.translate(0.5,0.5)
+    love.graphics.setColor(self.color)
+    love.graphics.points(self.body)
+    love.graphics.pop()
+end
 local Player = class(Snake) --player snake
 function Player:tick(dt)
     --control handling
@@ -249,7 +255,7 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
     local round = M.PXL.round -- make typing less annoying
     local function search(x,y,r)
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
-            local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
+            local cirCoord = {round(x + r * math.cos(a)), round(y + r * math.sin(a))}
             if isin(cirCoord, list) then
                 self.circledebug = {co={x=head.x,y=head.y}, r = r}--debugging visuals
 --                 print(inspect(self.circledebug))
@@ -259,7 +265,7 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
         if r > radlim then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,r+1)--search next ring
     end
-    return search(head.x, head.y, 1)
+    return search(head[1], head[2], 1)
 end
 function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisions
     local headptr = self.body[1]
@@ -270,8 +276,8 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         return
     end
     local function inc()
-        for k, v in pairs(headptr) do--apply one movement to headcopy
-            headptr[k] = v + self.vel[k]
+        for k, v in ipairs(headptr) do--apply one movement to headcopy
+            headptr[k] = v + self.vel[k==1 and 'x' or 'y']
         end
     end
     inc()
@@ -285,8 +291,8 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         if self:checkNoSelfCollide(depth+1, true) then return true end
     elseif depth > 1 then --in recursion (end yes?)
         self.body[1] = headcopy --reset head
-        self.pos = M.PXL.shallowcopy(headptr)
---         print("end")
+        self.pos = {x=headptr[1], y=headptr[2]}
+        print("end")
         return true
     end
     self.body[1] = headcopy --reset head
@@ -300,12 +306,12 @@ function AI:tick(dt)
     --square movement algo
     if head ~= self.body[1] then --if moved
         if math.abs(self.vel.x) == 1 then
-            if self._target.x == self.body[1].x then
+            if self._target.x == self.body[1][1] then
                 self:target() --lazyness...
                 self:avoid()
             end
         else
-            if self._target.y == self.body[1].y then
+            if self._target.y == self.body[1][2] then
                 self:target()
                 self:avoid()
             end
