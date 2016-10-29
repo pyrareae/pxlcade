@@ -19,7 +19,9 @@ PXL.options={--setting here!
 }
 
 --helpers
+local DOSAFERUN = true
 local function saferun(func, ...)
+    if not DOSAFERUN then return func(...) end
     ok, msg = pcall(func, ...)
     if not ok then
         print(msg)

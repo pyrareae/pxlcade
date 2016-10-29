@@ -162,6 +162,7 @@ function AI:init(opt)
     self.avtimer = Timer:new(opt.avoidtime or 500)
     self.notrunning  = true
     self.avoidRad = opt.avoidrad or 10
+    self.avoidOtherAI = opt.avoidOtherAI or false
     if not self.static.instances.ai then self.static.instances.ai = {} end
     self.static.instances.ai[#self.static.instances.ai+1]= self
 end
@@ -214,12 +215,17 @@ function AI:target(mode)
 end
 function AI:avoid()
     local blacklist = {}
-    for i, l in ipairs(self.static.instances) do --find all other snakes
-        if l ~= self then
-            blacklist[#blacklist+1] = l.body
+    if self.avoidOtherAI then
+        for i, l in ipairs(self.static.instances) do --find all other snakes
+            if l ~= self then
+                for j, v in ipairs(l.body) do--append into bl
+                    blacklist[#blacklist+1] = v
+                end
+            end
         end
+    else
+        blacklist = M.player.body
     end
-    blacklist = M.player.body--HACK
     self._avoid = self:circlefind(blacklist, self.avoidRad) --check for anything nearby
     if not self._avoid.fail then --found something
         local dir = {x=-(self._avoid.x - self.pos.x), y=-(self._avoid.y - self.pos.y)}
@@ -228,6 +234,7 @@ function AI:avoid()
 end
 function AI:circlefind(list, radlim) -- search in a circular pattern for coords in 'list'
     local radlim = radlim or 10 -- search radius
+    local head = self.body[1]
     local function isin(a, b) --check if array 'a' is in array 'b'
 --         print(M.PXL.inspect(a))
         for _, v in ipairs(b) do
@@ -244,13 +251,14 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
             local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
             if isin(cirCoord, list) then
+                self.circledebug = {co={x=head.x,y=head.y}, r = r}--debugging visuals
+--                 print(inspect(self.circledebug))
                 return cirCoord
             end
         end
         if r > radlim then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,r+1)--search next ring
     end
-    local head = self.body[1]
     return search(head.x, head.y, 1)
 end
 function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisions
@@ -272,13 +280,13 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         local ccwvel, vel = {x=-self.vel.y, y=self.vel.x} --[[rotate 90 degrees ccw]], {x=self.vel.y, y=-self.vel.x}
         self.vel = ccw and ccwvel or vel --rotate 90 degrees
         inc()
-        print("rotated vel ".. (ccw and 'ccw' or 'cw'))
+--         print("rotated vel ".. (ccw and 'ccw' or 'cw'))
         if self:checkNoSelfCollide(depth+1) then return true end--check again
         if self:checkNoSelfCollide(depth+1, true) then return true end
     elseif depth > 1 then --in recursion (end yes?)
         self.body[1] = headcopy --reset head
         self.pos = M.PXL.shallowcopy(headptr)
-        print("end")
+--         print("end")
         return true
     end
     self.body[1] = headcopy --reset head
@@ -349,7 +357,8 @@ local function cpudead()
 end
 function M:gameinit() --partial game state init
     local mapsize = self.menu.find("Map", true)
-    local avoidrad = self.menu.find("AIavoid", true)
+    local avoidrad = self.menu.find("avoidR", true)
+    local avoidother = self.menu.find("avoidAI", true)
     self:mapgen(mapsize[2], mapsize[3]) --regen mapgen
     local aiCount = self.menu.find("AIcount", true)
     local avoidTime = self.menu.find("avoidT", true)
@@ -363,7 +372,7 @@ function M:gameinit() --partial game state init
     self.player = Player({pos={x=self.map.x/2, y=self.map.y/2}, selfCollision = false, length = nil, speed = playerspeed})--spawn player centered
     for i=1, aiCount do
         local name = i==1 and 'ai' or 'ai'..tostring(i)
-        self[name] = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=avoidTime*100, avoidrad=avoidrad, selfCollision = false})--init ai
+        self[name] = AI({color=self.PXL.colors[self.PXL.round(math.random(2,6))][2], headColor = self.PXL.colors.red[2], speed=aispeed, canDie = true, avoidtime=avoidTime*100, avoidrad=avoidrad, selfCollision = false, avoidOtherAI = avoidother})--init ai
     end
 end
 function M:load() -- full game state init
@@ -379,10 +388,14 @@ function M:load() -- full game state init
         {name = 'AI sp.', range={1, 20}, selected = 4},
         {name = 'P sp.', range={1,20}, selected = 8},
         {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
-        {name = 'AIavoid', range={1, 20}, selected = 5},
+        {name = 'avoidR', range={1, 20}, selected = 5},
         {name = 'AIcount', range={1, 20}, selected = 4},
-        {name = 'avoidT', range={2, 15}, selected = 5}
+        {name = 'avoidT', range={2, 15}, selected = 5},
+        {name = "avoidAI", list={{'E', true}, {"X", false}}, selected=2}
     }
+    --uncomment for persistant menu state
+    if menu then self.menu = menu end menu = self.menu
+    
     function self.menu.find(name, getval) --return item with matching name
         for _, v in ipairs(self.menu) do
             if v.name == name then 
@@ -443,16 +456,18 @@ function M:draw()
     if self.state == 'run' or self.state == 'done' then
         local renderDebug = self.menu.find("VisDebug", true)[2]
         love.graphics.setColor(self.PXL.colors.gray[3])
-        self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(cpuscore()),1)
+        self.PXL.printCenter(tostring(self.player.score).."vs"..tostring(M.PXL.round(cpuscore())),1)
         love.graphics.setColor(self.PXL.colors.gray[2])
         self.PXL.printCenter(tostring(self.map.pellets).." "..tostring(self.map.x).."x"..tostring(self.map.y), 5)
         love.graphics.push()
         love.graphics.translate(self.map.offset.x, self.map.offset.y)
         
         if renderDebug then--draw ai range debugging crap
-            for _, ai in ipairs(Snake.static.instnces.ai) do
---                 love.graphics.setColor({0,255,255,20})
---                 love.graphics.points(ai.circledebug)--
+            for _, ai in ipairs(Snake.static.instances.ai) do
+                love.graphics.setColor({0,255,255,50})
+                if ai.circledebug and ai.circledebug.r then 
+                    love.graphics.ellipse('line', ai.circledebug.co.x, ai.circledebug.co.y, ai.circledebug.r, ai.circledebug.r)
+                end
             end
         end
         for x=1-self.map.offset.x, self.screen.x-self.map.offset.x do--draw map
@@ -468,7 +483,7 @@ function M:draw()
         end
 --         M.ai:runall('draw')
         if renderDebug then --show ai targeting
-            for _, ai in ipairs(Snake.static.instnces.ai) do
+            for _, ai in ipairs(Snake.static.instances.ai) do
                 love.graphics.setColor({255,0,0,200})
                 love.graphics.points(ai._target.x+.5, ai._target.y+.5)
                 love.graphics.setColor({255,255,0,200})
