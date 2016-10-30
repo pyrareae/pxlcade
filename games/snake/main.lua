@@ -102,7 +102,7 @@ function Snake:rebuildBody()
     self.body = new
 end
 
-function Snake:draw_()
+function Snake:prettyDraw() --slower but fancier draw
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
        local factor = math.exp(1)^(-x/(50+self.length/2)) --change gradient based on len
@@ -121,10 +121,10 @@ function Snake:draw_()
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
         if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
 --         print(i)
-        points(seg.x+0.5, seg.y+0.5)
-        --note that the offset is a negative value, so we're actually adding here. also extend the normal area by skiplen.
-        if seg.x < M.PXL.screen.x - self.map.offset.x + skiplen and seg.x > -self.map.offset.x - skiplen
-            and seg.y < M.PXL.screen.y - self.map.offset.y + skiplen and seg.y > -self.map.offset.y - skiplen  then
+        points(seg[1]+0.5, seg[2]+0.5)
+        --note that the offset i2 a negative value, so we're actually adding here. also extend the normal area by skiplen.
+        if seg[1] < M.PXL.screen.x - self.map.offset.x + skiplen and seg[1] > -self.map.offset.x - skiplen
+            and seg[2] < M.PXL.screen.y - self.map.offset.y + skiplen and seg[2] > -self.map.offset.y - skiplen  then
             --skip chunks if not on screen for fps boost
             i = i - 1
         else
@@ -132,12 +132,19 @@ function Snake:draw_()
         end
     end
 end
-function Snake:draw()
+function Snake:fastDraw() --fast but more basic draw
     love.graphics.push()
     love.graphics.translate(0.5,0.5)
     love.graphics.setColor(self.color)
     love.graphics.points(self.body)
     love.graphics.pop()
+end
+function Snake:draw(fast)
+    if fast then
+        self:fastDraw()
+    else
+        self:prettyDraw()
+    end
 end
 local Player = class(Snake) --player snake
 function Player:tick(dt)
@@ -247,7 +254,7 @@ function AI:avoid()
     end
     self._avoid = self:circlefind(blacklist, self.avoidRad) --check for anything nearby
     if not self._avoid.fail then --found something
-        local dir = {x=-(self._avoid.x - self.pos.x), y=-(self._avoid.y - self.pos.y)}
+        local dir = {x=-(self._avoid[1] - self.pos.x), y=-(self._avoid[2] - self.pos.y)}
         self:calcSqVel(dir)
     end
 end
@@ -270,7 +277,7 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
             local cirCoord = {round(x + r * math.cos(a)), round(y + r * math.sin(a))}
             if isin(cirCoord, list) then
-                self.circledebug = {co={x=round(head.x)+.5,y=round(head.y)+.5}, r = r}--debugging visuals
+                self.circledebug = {co={x=round(head[1])+.5,y=round(head[2])+.5}, r = r}--debugging visuals
 --                 print(inspect(self.circledebug))
                 self.circledebugtimer:start()
                 return cirCoord
@@ -439,6 +446,7 @@ function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
         self.player:tick(dt)
+        if love.timer.getFPS() < 20 then self.doFastDraw = true end --fps check
         if cpudead() then self.state = 'done' end
     end
     if self.state ~= 'done' and self.state ~= 'menu' then
@@ -503,7 +511,7 @@ function M:draw()
             end
         end
         for _, snake in ipairs(Snake.static.instances) do
-            snake:draw()
+            snake:draw(self.doFastDraw)
         end
 --         M.ai:runall('draw')
         if renderDebug then --show ai targeting
@@ -511,7 +519,7 @@ function M:draw()
                 love.graphics.setColor({255,0,0,200})
                 love.graphics.points(ai._target.x+.5, ai._target.y+.5)
                 love.graphics.setColor({255,255,0,200})
-                if not ai._avoid.fail then love.graphics.points(ai._avoid.x+.5, ai._avoid.y+.5) end
+                if not ai._avoid.fail then love.graphics.points(ai._avoid[1]+.5, ai._avoid[2]+.5) end
             end
         end
         

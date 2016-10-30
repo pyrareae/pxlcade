@@ -19,9 +19,9 @@ PXL.options={--setting here!
 }
 
 --helpers
-local saferunloop = false
+local saferunloop, dosaferun = false, false
 local function saferun(func, ...)
---     if not DOSAFERUN then return func(...) end
+    if not dosaferun then return func(...) end
     ok, msg = pcall(func, ...)
     if not ok then
         if not saferunloop then PXL.ReturnMSG('error, (see console)', 1000) end
