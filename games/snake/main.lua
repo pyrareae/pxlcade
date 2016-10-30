@@ -112,12 +112,22 @@ function Snake:draw()
        return c
     end
 --     love.graphics.setColor(self.color)
-    for i = #self.body, 1, -1 do
+    local i = #self.body
+    local points = love.graphics.points --speedup slightly
+    while i > 0 do
         local seg = self.body[i]
         love.graphics.setColor(fadecolor(self.color, i))
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
         if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
-        love.graphics.points(seg.x+0.5, seg.y+0.5)
+--         print(i)
+        points(seg.x+0.5, seg.y+0.5)
+        if seg.x < M.PXL.screen.x - self.map.offset.x and seg.x > -self.map.offset.x 
+            and seg.y < M.PXL.screen.y - self.map.offset.y and seg.y > -self.map.offset.y  then
+            --skip chunks if not on screen for fps boost
+            i = i - 1
+        else
+            i = i - 10
+        end
     end
 end
 
@@ -163,6 +173,7 @@ function AI:init(opt)
     self.notrunning  = true
     self.avoidRad = opt.avoidrad or 10
     self.avoidOtherAI = opt.avoidOtherAI or false
+    self.circledebugtimer = Timer:new(300)
     if not self.static.instances.ai then self.static.instances.ai = {} end
     self.static.instances.ai[#self.static.instances.ai+1]= self
 end
@@ -251,8 +262,9 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
             local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
             if isin(cirCoord, list) then
-                self.circledebug = {co={x=head.x,y=head.y}, r = r}--debugging visuals
+                self.circledebug = {co={x=round(head.x)+.5,y=round(head.y)+.5}, r = r}--debugging visuals
 --                 print(inspect(self.circledebug))
+                self.circledebugtimer:start()
                 return cirCoord
             end
         end
@@ -317,6 +329,10 @@ function AI:tick(dt)
         if self._avoid.fail then
             self:target()
         end
+    end
+    --clear head avoidance visuals
+    if self.circledebugtimer:once() then
+        self.circledebug = nil
     end
 end
 function AI:runAll(name, ...) --method on all instances\
@@ -384,7 +400,7 @@ function M:load() -- full game state init
     self.menu = {--menu option config
         maxh = 5, --when to scroll down
         pos = 1,
-        {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
+        {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"3x3", 3,3}}, selected=1},
         {name = 'AI sp.', range={1, 20}, selected = 4},
         {name = 'P sp.', range={1,20}, selected = 8},
         {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
