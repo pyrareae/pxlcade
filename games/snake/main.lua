@@ -114,6 +114,7 @@ function Snake:draw()
 --     love.graphics.setColor(self.color)
     local i = #self.body
     local points = love.graphics.points --speedup slightly
+    local skiplen = 10
     while i > 0 do
         local seg = self.body[i]
         love.graphics.setColor(fadecolor(self.color, i))
@@ -121,12 +122,13 @@ function Snake:draw()
         if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
 --         print(i)
         points(seg.x+0.5, seg.y+0.5)
-        if seg.x < M.PXL.screen.x - self.map.offset.x and seg.x > -self.map.offset.x 
-            and seg.y < M.PXL.screen.y - self.map.offset.y and seg.y > -self.map.offset.y  then
+        --note that the offset is a negative value, so we're actually adding here. also extend the normal area by skiplen.
+        if seg.x < M.PXL.screen.x - self.map.offset.x + skiplen and seg.x > -self.map.offset.x - skiplen
+            and seg.y < M.PXL.screen.y - self.map.offset.y + skiplen and seg.y > -self.map.offset.y - skiplen  then
             --skip chunks if not on screen for fps boost
             i = i - 1
         else
-            i = i - 10
+            i = i - skiplen
         end
     end
 end
@@ -433,7 +435,7 @@ function M:update(dt)
         self.player:tick(dt)
         if cpudead() then self.state = 'done' end
     end
-    if self.state ~= 'done' then
+    if self.state ~= 'done' and self.state ~= 'menu' then
         self.ai:runAll('tick', dt)
     end
     if self.map.pellets == 0 then
