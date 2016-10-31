@@ -1,3 +1,5 @@
+![demo gif](http://i.imgur.com/NMeTFTJ.gif)
+
 # PXLcade
 PXLcade is a 48x64 game pack made with the love game framework, each game trying to make the most of this super low resolution. This project is mainly just something I'm using to learn love.
 
