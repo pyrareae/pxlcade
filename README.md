@@ -1,7 +1,7 @@
 ![demo gif](http://i.imgur.com/NMeTFTJ.gif)
 
 # PXLcade
-PXLcade is a 48x64 game pack made with the love game framework, each game trying to make the most of this super low resolution. This project is mainly just something I'm using to learn love.
+PXLcade is a 64x48 game pack made with the love game framework, each game trying to make the most of this super low resolution. This project is mainly just something I'm using to learn love that's been growing bigger.
 
 ## Games
 + Snake -- A snake game slightly inspired my slither.io, the fanciest of the bunch.
@@ -9,6 +9,7 @@ PXLcade is a 48x64 game pack made with the love game framework, each game trying
    You are competing against a number of ai snakes, you win by eating more then the avarage number of pellets they eat, or by killing them. You lose by dying or not eating more than they eat before the map runs out of pellets. You can adjust the number of AI, map size, player and ai speed, and a few of the ai behaviour settings. 
 
 + Pong -- The classic hello world game
+
    Single and 2 player modes!
 + Breakout -- Break them blocks!
 
