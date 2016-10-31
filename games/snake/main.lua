@@ -34,7 +34,7 @@ function Snake:init(opt)
     self.map = M.map
     self.length = opt.length or 5
     self.vel = opt.vel or {x=0,y=0}
-    self.body = {}--NOTE keep body vals whole numbers
+    self.body = {}
     self.color = opt.color or M.PXL.colors.blue[2]
     self.headColor = opt.headColor or M.PXL.colors.orange[3]
     self.speed = opt.speed or 6
@@ -63,11 +63,11 @@ function Snake:tick(dt) --update function
     end
     local head = self.body[1]
     --check for pellet
-    if self.map[head.x] and self.map[head.x][head.y] == 1 then --TODO add rollover handler
+    if self.map[head[1]] and self.map[head[1]][head[2]] == 1 then --TODO add rollover handler
         self.length = self.length+1 --Yum!
         self.score = self.score+1
         self.map.pellets = self.map.pellets -1
-        self.map[head.x][head.y] = 0
+        self.map[head[1]][head[2]] = 0
         self.speed = self.speed+0.01 --make each pellet boost speed 
     end
     --check for other snake
@@ -83,7 +83,7 @@ function Snake:collisionCheck(selfcoll)
     for i, s in ipairs(self.static.instances) do
         if selfcoll or s ~= self then --ignore self colision (or not)
             for _, seg in ipairs(s.body) do --loop over body and check for collision
-                if head.x == seg.x and head.y == seg.y and 
+                if head[1] == seg[1] and head[2] == seg[2] and 
                     seg ~= head then --don't count your own head as a collision
                     return true
                 end
@@ -95,14 +95,14 @@ end
 
 function Snake:rebuildBody()
     local new = {}
-    new[1] = {x=M.PXL.round(self.pos.x), y=M.PXL.round(self.pos.y)}
+    new[1] = {M.PXL.round(self.pos.x), M.PXL.round(self.pos.y)}
     for i=1, math.min(#self.body+1,self.length-1) do--loop through all but the last shifting the body
         new[i+1] = self.body[i] or new[i]
     end
     self.body = new
 end
 
-function Snake:draw()
+function Snake:prettyDraw() --slower but fancier draw
     local function fadecolor(color, x)
        local c = {} --python made me forget if this needs to be done
        local factor = math.exp(1)^(-x/(50+self.length/2)) --change gradient based on len
@@ -112,15 +112,40 @@ function Snake:draw()
        return c
     end
 --     love.graphics.setColor(self.color)
-    for i = #self.body, 1, -1 do
+    local i = #self.body
+    local points = love.graphics.points --speedup slightly
+    local skiplen = 10
+    while i > 0 do
         local seg = self.body[i]
         love.graphics.setColor(fadecolor(self.color, i))
         if i == 1 then love.graphics.setColor(self.headColor) end --draw head a different color
         if self.dead then love.graphics.setColor(fadecolor(self.color, i+50)) end
-        love.graphics.points(seg.x+0.5, seg.y+0.5)
+--         print(i)
+        points(seg[1]+0.5, seg[2]+0.5)
+        --note that the offset i2 a negative value, so we're actually adding here. also extend the normal area by skiplen.
+        if seg[1] < M.PXL.screen.x - self.map.offset.x + skiplen and seg[1] > -self.map.offset.x - skiplen
+            and seg[2] < M.PXL.screen.y - self.map.offset.y + skiplen and seg[2] > -self.map.offset.y - skiplen  then
+            --skip chunks if not on screen for fps boost
+            i = i - 1
+        else
+            i = i - skiplen
+        end
     end
 end
-
+function Snake:fastDraw() --fast but more basic draw
+    love.graphics.push()
+    love.graphics.translate(0.5,0.5)
+    love.graphics.setColor(self.color)
+    love.graphics.points(self.body)
+    love.graphics.pop()
+end
+function Snake:draw(fast)
+    if fast then
+        self:fastDraw()
+    else
+        self:prettyDraw()
+    end
+end
 local Player = class(Snake) --player snake
 function Player:tick(dt)
     --control handling
@@ -163,6 +188,7 @@ function AI:init(opt)
     self.notrunning  = true
     self.avoidRad = opt.avoidrad or 10
     self.avoidOtherAI = opt.avoidOtherAI or false
+    self.circledebugtimer = Timer:new(300)
     if not self.static.instances.ai then self.static.instances.ai = {} end
     self.static.instances.ai[#self.static.instances.ai+1]= self
 end
@@ -228,7 +254,7 @@ function AI:avoid()
     end
     self._avoid = self:circlefind(blacklist, self.avoidRad) --check for anything nearby
     if not self._avoid.fail then --found something
-        local dir = {x=-(self._avoid.x - self.pos.x), y=-(self._avoid.y - self.pos.y)}
+        local dir = {x=-(self._avoid[1] - self.pos.x), y=-(self._avoid[2] - self.pos.y)}
         self:calcSqVel(dir)
     end
 end
@@ -249,17 +275,18 @@ function AI:circlefind(list, radlim) -- search in a circular pattern for coords 
     local round = M.PXL.round -- make typing less annoying
     local function search(x,y,r)
         for a = 0, 2*math.pi, 0.025 do --loop each ring checking for matches
-            local cirCoord = {x=round(x + r * math.cos(a)), y=round(y + r * math.sin(a))}
+            local cirCoord = {round(x + r * math.cos(a)), round(y + r * math.sin(a))}
             if isin(cirCoord, list) then
-                self.circledebug = {co={x=head.x,y=head.y}, r = r}--debugging visuals
+                self.circledebug = {co={x=round(head[1])+.5,y=round(head[2])+.5}, r = r}--debugging visuals
 --                 print(inspect(self.circledebug))
+                self.circledebugtimer:start()
                 return cirCoord
             end
         end
         if r > radlim then return {x=0,y=0,fail=true} end --search limit
         return search(x,y,r+1)--search next ring
     end
-    return search(head.x, head.y, 1)
+    return search(head[1], head[2], 1)
 end
 function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisions
     local headptr = self.body[1]
@@ -270,8 +297,8 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         return
     end
     local function inc()
-        for k, v in pairs(headptr) do--apply one movement to headcopy
-            headptr[k] = v + self.vel[k]
+        for k, v in ipairs(headptr) do--apply one movement to headcopy
+            headptr[k] = v + self.vel[k==1 and 'x' or 'y']
         end
     end
     inc()
@@ -285,8 +312,8 @@ function AI:checkNoSelfCollide(depth, ccw) --alter course to avoid self collisio
         if self:checkNoSelfCollide(depth+1, true) then return true end
     elseif depth > 1 then --in recursion (end yes?)
         self.body[1] = headcopy --reset head
-        self.pos = M.PXL.shallowcopy(headptr)
---         print("end")
+        self.pos = {x=headptr[1], y=headptr[2]}
+        print("end")
         return true
     end
     self.body[1] = headcopy --reset head
@@ -300,12 +327,12 @@ function AI:tick(dt)
     --square movement algo
     if head ~= self.body[1] then --if moved
         if math.abs(self.vel.x) == 1 then
-            if self._target.x == self.body[1].x then
+            if self._target.x == self.body[1][1] then
                 self:target() --lazyness...
                 self:avoid()
             end
         else
-            if self._target.y == self.body[1].y then
+            if self._target.y == self.body[1][2] then
                 self:target()
                 self:avoid()
             end
@@ -317,6 +344,10 @@ function AI:tick(dt)
         if self._avoid.fail then
             self:target()
         end
+    end
+    --clear head avoidance visuals
+    if self.circledebugtimer:once() then
+        self.circledebug = nil
     end
 end
 function AI:runAll(name, ...) --method on all instances\
@@ -356,6 +387,7 @@ local function cpudead()
     return true
 end
 function M:gameinit() --partial game state init
+    self.doFastDraw = false
     local mapsize = self.menu.find("Map", true)
     local avoidrad = self.menu.find("avoidR", true)
     local avoidother = self.menu.find("avoidAI", true)
@@ -384,7 +416,7 @@ function M:load() -- full game state init
     self.menu = {--menu option config
         maxh = 5, --when to scroll down
         pos = 1,
-        {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"4x4", 4,4}}, selected=1},
+        {name = 'Map', list={{'1x1', 1,1}, {'2x2', 2,2}, {".5x.5", .5, .5}, {".5x2", .5, 2}, {"1.5x3", 1.5, 3}, {"3x3", 3,3}}, selected=1},
         {name = 'AI sp.', range={1, 20}, selected = 4},
         {name = 'P sp.', range={1,20}, selected = 8},
         {name = "VisDebug", list={{'E', true}, {"X", false}}, selected=2},
@@ -415,9 +447,10 @@ function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
         self.player:tick(dt)
+        if not self.doFastDraw and love.timer.getFPS() < 20 then self.doFastDraw = true; print('fast draw mode endabled') end --turn on fast graphics if there is an fps drop
         if cpudead() then self.state = 'done' end
     end
-    if self.state ~= 'done' then
+    if self.state ~= 'done' and self.state ~= 'menu' then
         self.ai:runAll('tick', dt)
     end
     if self.map.pellets == 0 then
@@ -479,7 +512,7 @@ function M:draw()
             end
         end
         for _, snake in ipairs(Snake.static.instances) do
-            snake:draw()
+            snake:draw(self.doFastDraw)
         end
 --         M.ai:runall('draw')
         if renderDebug then --show ai targeting
@@ -487,7 +520,7 @@ function M:draw()
                 love.graphics.setColor({255,0,0,200})
                 love.graphics.points(ai._target.x+.5, ai._target.y+.5)
                 love.graphics.setColor({255,255,0,200})
-                if not ai._avoid.fail then love.graphics.points(ai._avoid.x+.5, ai._avoid.y+.5) end
+                if not ai._avoid.fail then love.graphics.points(ai._avoid[1]+.5, ai._avoid[2]+.5) end
             end
         end
         

@@ -19,11 +19,12 @@ PXL.options={--setting here!
 }
 
 --helpers
-local DOSAFERUN = true
+local saferunloop, dosaferun = false, false
 local function saferun(func, ...)
-    if not DOSAFERUN then return func(...) end
+    if not dosaferun then return func(...) end
     ok, msg = pcall(func, ...)
     if not ok then
+        if not saferunloop then PXL.ReturnMSG('error, (see console)', 1000) end
         print(msg)
     else
         return msg --if no error this should be the return val
@@ -110,7 +111,8 @@ function Games:updateCheck()--check for updates in games and reload the files
     if dirty then 
         print("[pxl]Reload triggered")
         self:load()
-        PXL.state = 'menu'
+--         PXL.state = 'menu'
+        PXL.ReturnMSG('auto reload')
     end
 end
 
@@ -156,6 +158,13 @@ PXL.screen = {
 function GotoMenu() --return to main menu, call from subgames
     PXL.state="menu"
 end
+function PXL.ReturnMSG(message, time) --return to menu and display a message
+    local time = time or 500
+    PXL.timers.intro:start(time) --using the intro timer because we don't really need another timer
+    PXL.message = message
+    PXL.state = 'message'
+end
+PXL.message = "" --message to display in case of error or restart
 PXL.images = {}
 PXL.timers = {}
 PXL.states = { --substates
@@ -249,6 +258,10 @@ function love.mousemoved( x, y, dx, dy, istouch )
     end
 end
 function love.keypressed(key, screencode, isrepeat)
+    if love.keyboard.isDown('lctrl') and key == 'r' then
+        love.filesystem.load('main.lua')()--reload this script
+        love.load()
+    end
     if PXL.state == 'menu' and not isrepeat then
         if key == "return" then
             PXL.state = 'game'
@@ -397,6 +410,8 @@ local function draw()
             love.graphics.setColor(PXL.colors.gray[6])
         elseif PXL.state == 'intro' then
             love.graphics.draw(PXL.images.banner, 0,0)
+        elseif PXL.state == 'message' then
+            PXL.printCenter(PXL.message)
         elseif PXL.state == 'game' then
             safemethodrun(PXL.games:active(), 'draw')
         end

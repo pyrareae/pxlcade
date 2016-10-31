@@ -12,6 +12,7 @@ function T:new(time)
     o.last = self.millis()
     o.fired = false
     o.stopped = false
+    o._remaining = o:remaining()
 --     self.timers[#self.timers+1] = o --save this into list
     return o
 end
