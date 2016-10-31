@@ -387,6 +387,7 @@ local function cpudead()
     return true
 end
 function M:gameinit() --partial game state init
+    self.doFastDraw = false
     local mapsize = self.menu.find("Map", true)
     local avoidrad = self.menu.find("avoidR", true)
     local avoidother = self.menu.find("avoidAI", true)
@@ -446,7 +447,7 @@ function M:update(dt)
     if love.keyboard.isDown('q') then GotoMenu() end
     if self.state == 'run' then
         self.player:tick(dt)
-        if love.timer.getFPS() < 20 then self.doFastDraw = true end --fps check
+        if not self.doFastDraw and love.timer.getFPS() < 20 then self.doFastDraw = true; print('fast draw mode endabled') end --turn on fast graphics if there is an fps drop
         if cpudead() then self.state = 'done' end
     end
     if self.state ~= 'done' and self.state ~= 'menu' then
