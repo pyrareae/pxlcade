@@ -8,7 +8,8 @@ PXL.options={--setting here!
         crt = false,
         grain = false,
         gpugrain = true,
-        crtwarp = true
+        crtwarp = true,
+        grid = true
     },
     anim = {
         intro = 1000,
@@ -289,13 +290,47 @@ function love.keypressed(key, screencode, isrepeat)
     elseif key == '3' then
         PXL.options.fx.crtwarp = not PXL.options.fx.crtwarp
         buildFX()
+    elseif key == '4' then
+        PXL.options.fx.grid = not PXL.options.fx.grid
+    end
+end
+PXL.pxlgrid = {}
+function PXL:onResize() --called every time window is resized
+    PXL.timers.fxupdate:start() -- delay the actual fx rebuild event because it makes resizing the window super laggy
+    --build pixel grid
+    self.pxlgrid = {}
+    local scale = self.screen:scale()
+    local function append(...) --append to pxlgrid
+        local len = #self.pxlgrid
+        for i, v in ipairs({...}) do
+            self.pxlgrid[len+i] = v
+        end
+    end
+    local top, bottom, left, right = 0, self.screen.y*scale, 0, self.screen.x*scale
+    for x=1, self.screen.x do --loop over in increments of the scale up pixels. making up a zigzag for a speed boot so that the entire grid is drawn as a single line stored in a single table drawn with only one function call.
+        if x%2==0 then 
+            append(x*scale, top)
+            append(x*scale, bottom)
+        else 
+            append(x*scale, bottom) 
+            append(x*scale, top)
+        end
+    end
+    for y=1, self.screen.y do
+        if y%2==0 then 
+            append(left, y*scale) 
+            append(right, y*scale)
+        else 
+            append(right, y*scale)
+            append(left, y*scale) 
+        end
     end
 end
 function love.update(dt)
     PXL.games:updateCheck() -- watch subgames for changes (in main.lua)
     local res = {love.graphics.getHeight(), love.graphics.getWidth()}
     if (PXL.lastres[0] ~= res[0]) or (PXL.lastres[1] ~= res[1]) then
-        PXL.timers.fxupdate:start() -- delay the actual fx rebuild event because it makes resizing the window super laggy
+        PXL:onResize()
         PXL.lastres = res
     end
     if PXL.timers.fxupdate:once() then
@@ -381,8 +416,10 @@ local function draw()
     PXL.screen.canvas:setFilter('nearest', 'nearest', 0)
     love.graphics.setCanvas(PXL.screen.canvas)
 --     love.graphics.setDefaultFilter('nearest', 'nearest', 0)
-    love.graphics.clear()
+--     love.graphics.clear()
+    love.graphics.clear(10,10,10)
     love.graphics.setFont(PXL.font)
+    
     
     local function smalldraw()
         if PXL.state == 'menu' then
@@ -433,10 +470,23 @@ local function draw()
         smalldraw()
     end
     
+    
     love.graphics.setCanvas(old_canvas)
     love.graphics.setBlendMode("alpha", "premultiplied")
     love.graphics.setColor(255,255,255,255)--reset color
     love.graphics.draw(PXL.screen.canvas, PXL.screen:offset(),0,0, PXL.screen:scale(), PXL.screen:scale())
+    
+    if PXL.options.fx.grid then
+        love.graphics.push()
+        love.graphics.translate(PXL.screen:offset(), 0)
+        love.graphics.setLineWidth(2)
+        love.graphics.setColor(0,0,0,255)
+        love.graphics.line(PXL.pxlgrid)
+        love.graphics.setLineWidth(4)
+--         love.graphics.setColor(0,0,0,255)
+        love.graphics.rectangle('line', 0,0,PXL.screen.x*PXL.screen:scale(),PXL.screen.y*PXL.screen:scale())
+        love.graphics.pop()
+    end
     
     if PXL.options.fx.crt then
         love.graphics.setBlendMode("multiply")
